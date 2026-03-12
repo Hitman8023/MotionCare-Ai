@@ -1,0 +1,20 @@
+import PatientOverview from '../components/PatientOverview';
+import Vitals from '../components/Vitals';
+import ProgressAlerts from '../components/ProgressAlerts';
+
+export default function Dashboard() {
+    return (
+        <>
+            <div className="page-header">
+                <div className="page-title">Patient Recovery Dashboard</div>
+                <div className="page-subtitle">
+                    <span className="live-dot"></span>
+                    Live · Last updated just now · Session #14 · Dr. Rachel Moore, PT
+                </div>
+            </div>
+            <PatientOverview />
+            <Vitals />
+            <ProgressAlerts />
+        </>
+    );
+}
