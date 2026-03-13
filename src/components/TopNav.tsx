@@ -1,10 +1,26 @@
 import { useEffect, useState } from 'react';
 import { useTheme } from '../ThemeContext';
+import type { UserRole } from '../types/auth';
 
-export default function TopNav() {
+type TopNavProps = {
+    isSidebarOpen: boolean;
+    onMenuToggle: () => void;
+    role: UserRole;
+    displayName: string;
+    onLogout: () => void;
+};
+
+export default function TopNav({ isSidebarOpen, onMenuToggle, role, displayName, onLogout }: TopNavProps) {
     const [timeStr, setTimeStr] = useState('');
     const [dateStr, setDateStr] = useState('');
     const { theme, toggleTheme } = useTheme();
+    const roleLabel = role === 'doctor' ? 'Doctor Portal' : 'Patient Portal';
+    const initials = displayName
+        .split(' ')
+        .map((chunk) => chunk[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase();
 
     useEffect(() => {
         const updateClock = () => {
@@ -26,6 +42,18 @@ export default function TopNav() {
 
     return (
         <nav className="topnav">
+            <button
+                type="button"
+                className="menu-toggle"
+                onClick={onMenuToggle}
+                aria-label={isSidebarOpen ? 'Close navigation menu' : 'Open navigation menu'}
+                aria-expanded={isSidebarOpen}
+            >
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+
             <div className="nav-logo">
                 <div className="nav-logo-icon">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -39,8 +67,8 @@ export default function TopNav() {
 
             <div className="nav-center">
                 <div className="patient-selector">
-                    <div className="patient-avatar">JD</div>
-                    <span>James Davidson</span>
+                    <div className="patient-avatar">{role === 'doctor' ? 'DR' : 'PT'}</div>
+                    <span className="patient-selector-name">{displayName} · {roleLabel}</span>
                     <svg className="patient-selector-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                         <path d="m6 9 6 6 6-6" />
                     </svg>
@@ -91,7 +119,10 @@ export default function TopNav() {
                         <path d="m21 21-4.35-4.35" />
                     </svg>
                 </div>
-                <div className="profile-btn">DR</div>
+                <button type="button" className="topnav-logout" onClick={onLogout}>
+                    Logout
+                </button>
+                <div className="profile-btn" title={displayName}>{initials}</div>
             </div>
         </nav>
     );

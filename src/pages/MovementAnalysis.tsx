@@ -41,7 +41,7 @@ export default function MovementAnalysis() {
             </div>
 
             {/* Summary cards */}
-            <div className="section" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+            <div className="section stats-grid-4">
                 {[
                     { label: 'Active ROM', val: `${rom}°`, change: '+4° this week', color: 'var(--teal)' },
                     { label: 'Movement Score', val: '84%', change: '+6% improvement', color: 'var(--green)' },
@@ -117,12 +117,12 @@ export default function MovementAnalysis() {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {sessions.map((s, i) => (
-                            <div key={i} style={{ display: 'grid', gridTemplateColumns: '80px 1fr 1fr 1fr 40px', alignItems: 'center', padding: '12px', borderRadius: 'var(--radius-sm)', background: i === 0 ? 'rgba(34,211,238,.06)' : 'transparent', border: `1px solid ${i === 0 ? 'rgba(34,211,238,.12)' : 'var(--border-light)'}` }}>
-                                <span style={{ fontSize: '13px', fontWeight: i === 0 ? 700 : 500, color: i === 0 ? 'var(--teal)' : 'var(--text-secondary)' }}>{s.date}</span>
-                                <span style={{ fontSize: '14px', fontWeight: 800, fontFamily: 'var(--mono)' }}>{s.rom}</span>
-                                <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--green)' }}>{s.accuracy}</span>
-                                <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{s.reps} reps</span>
-                                <span style={{ fontSize: '16px', color: 'var(--green)' }}>{s.trend === 'up' ? '↑' : '→'}</span>
+                            <div key={i} className="history-row" style={{ background: i === 0 ? 'rgba(34,211,238,.06)' : 'transparent', border: `1px solid ${i === 0 ? 'rgba(34,211,238,.12)' : 'var(--border-light)'}` }}>
+                                <span className="history-row-date" style={{ color: i === 0 ? 'var(--teal)' : 'var(--text-secondary)' }}>{s.date}</span>
+                                <span className="history-row-value">{s.rom}</span>
+                                <span className="history-row-accent">{s.accuracy}</span>
+                                <span className="history-row-meta">{s.reps} reps</span>
+                                <span className="history-row-trend">{s.trend === 'up' ? '↑' : '→'}</span>
                             </div>
                         ))}
                     </div>

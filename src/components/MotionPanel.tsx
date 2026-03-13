@@ -287,7 +287,7 @@ export default function MotionPanel() {
 
     return (
         <>
-            <div className="section grid-2" style={{ alignItems: 'start' }}>
+            <div className="section grid-2 motion-panel-layout" style={{ alignItems: 'start' }}>
             {/* Hand Movement Analysis */}
             <div className="card">
                 <div className="card-header">
@@ -304,7 +304,7 @@ export default function MotionPanel() {
                     <span className="mini-tag tag-live">LIVE</span>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', gap: '18px', alignItems: 'start' }}>
+                <div className="motion-card-grid">
                     <div>
                         <button
                             type="button"
@@ -368,7 +368,7 @@ export default function MotionPanel() {
             </div>
 
             {/* Exercise Quality + AI Insights stacked */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <div className="stack-column">
                 {/* Exercise Quality */}
                 <div className="card">
                     <div className="card-header">

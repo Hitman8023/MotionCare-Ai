@@ -2,7 +2,11 @@ import PatientOverview from '../components/PatientOverview';
 import Vitals from '../components/Vitals';
 import ProgressAlerts from '../components/ProgressAlerts';
 
-export default function Dashboard() {
+type DashboardProps = {
+    patientUid: string;
+};
+
+export default function Dashboard({ patientUid }: DashboardProps) {
     return (
         <>
             <div className="page-header">
@@ -13,7 +17,7 @@ export default function Dashboard() {
                 </div>
             </div>
             <PatientOverview />
-            <Vitals />
+            <Vitals patientUid={patientUid} />
             <ProgressAlerts />
         </>
     );

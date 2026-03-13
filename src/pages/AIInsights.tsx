@@ -28,7 +28,7 @@ export default function AIInsights() {
             </div>
 
             {/* Prediction Cards */}
-            <div className="section" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+            <div className="section stats-grid-3">
                 {predictions.map((p, i) => (
                     <div key={i} className="card" style={{ textAlign: 'center', position: 'relative' }}>
                         <div style={{ fontSize: '10px', fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: '8px' }}>{p.label}</div>

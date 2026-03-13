@@ -45,18 +45,18 @@ export default function PatientHistory() {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         {patients.map((p, i) => (
-                            <div key={i} style={{ display: 'grid', gridTemplateColumns: '48px 1fr auto auto', alignItems: 'center', gap: '16px', padding: '14px', borderRadius: 'var(--radius-sm)', background: i === 0 ? 'rgba(34,211,238,.05)' : 'transparent', border: `1px solid ${i === 0 ? 'rgba(34,211,238,.12)' : 'var(--border-light)'}`, cursor: 'pointer', transition: 'all .2s' }}>
-                                <div style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'linear-gradient(135deg, #22d3ee, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '16px', fontWeight: 800 }}>{p.name.split(' ').map(n => n[0]).join('')}</div>
-                                <div>
+                            <div key={i} className="patient-row" style={{ background: i === 0 ? 'rgba(34,211,238,.05)' : 'transparent', border: `1px solid ${i === 0 ? 'rgba(34,211,238,.12)' : 'var(--border-light)'}` }}>
+                                <div className="patient-row-avatar" style={{ width: '48px', height: '48px', borderRadius: '14px', background: 'linear-gradient(135deg, #22d3ee, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: '16px', fontWeight: 800 }}>{p.name.split(' ').map(n => n[0]).join('')}</div>
+                                <div className="patient-row-main">
                                     <div style={{ fontSize: '14px', fontWeight: 700 }}>{p.name}</div>
                                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{p.surgery} · Age {p.age}</div>
                                     <div style={{ fontSize: '11px', color: p.status === 'completed' ? 'var(--green)' : 'var(--teal)', fontWeight: 600, marginTop: '2px' }}>{p.stage}</div>
                                 </div>
-                                <div style={{ textAlign: 'center' }}>
+                                <div className="patient-row-stat">
                                     <div style={{ fontSize: '22px', fontWeight: 900, color: p.score >= 90 ? 'var(--green)' : p.score >= 70 ? 'var(--teal)' : 'var(--orange)' }}>{p.score}</div>
                                     <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>Score</div>
                                 </div>
-                                <div style={{ textAlign: 'center' }}>
+                                <div className="patient-row-stat">
                                     <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)' }}>{p.sessions}</div>
                                     <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>Sessions</div>
                                 </div>

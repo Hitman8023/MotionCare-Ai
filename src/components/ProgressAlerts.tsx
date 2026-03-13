@@ -82,7 +82,7 @@ export default function ProgressAlerts() {
                 <div className="heatmap-label-row">
                     {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => <div key={d} className="heatmap-day">{d}</div>)}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: '5px' }}>
+                <div className="heatmap-grid">
                     {intensity.map((v, i) => (
                         <div key={i} className="heatmap-cell" style={{ background: colors[v], height: '24px', border: v > 0 ? '1px solid rgba(34,211,238,.1)' : '1px solid transparent' }}
                             title={v === 0 ? 'No session' : v === 1 ? 'Partial' : v === 2 ? 'Good' : 'Excellent'} />
@@ -91,7 +91,7 @@ export default function ProgressAlerts() {
             </div>
 
             {/* Alerts */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <div className="stack-column">
                 <div className="card">
                     <div className="card-header">
                         <div className="card-title">
@@ -154,7 +154,7 @@ export default function ProgressAlerts() {
                             Today's Session
                         </div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div className="session-summary-grid">
                         {[
                             { val: '42', label: 'Min Elapsed', color: 'var(--purple)' },
                             { val: '18', label: 'Reps Done', color: 'var(--teal)' },

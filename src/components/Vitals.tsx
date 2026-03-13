@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { subscribeToPatientLiveData } from '../services/realtimeDbService';
+import type { SensorSample } from '../types/sensor';
 
 function makePath(data: number[], w: number, h: number, pad = 4) {
     const min = Math.min(...data) - 2;
@@ -10,42 +12,47 @@ function makePath(data: number[], w: number, h: number, pad = 4) {
     return { d, area };
 }
 
-export default function Vitals() {
-    const [hr, setHr] = useState(78);
-    const [spo2, setSpo2] = useState(98.2);
-    const [temp, setTemp] = useState(36.7);
+type VitalsProps = {
+    patientUid: string;
+};
 
-    const [hrBuf, setHrBuf] = useState<number[]>(() =>
-        Array.from({ length: 30 }, (_, i) => 70 + Math.sin(i * 0.3) * 8 + Math.random() * 4)
-    );
-    const [spo2Buf, setSpo2Buf] = useState<number[]>(() =>
-        Array.from({ length: 30 }, (_, i) => 97 + Math.sin(i * 0.2) * 0.8 + Math.random() * 0.4)
-    );
-    const [tempBuf, setTempBuf] = useState<number[]>(() =>
-        Array.from({ length: 30 }, (_, i) => 36.5 + Math.sin(i * 0.1) * 0.3 + Math.random() * 0.1)
-    );
+export default function Vitals({ patientUid }: VitalsProps) {
+    const [sample, setSample] = useState<SensorSample | null>(null);
+    const [error, setError] = useState('');
+
+    const [hrBuf, setHrBuf] = useState<number[]>(() => Array.from({ length: 30 }, () => 0));
+    const [spo2Buf, setSpo2Buf] = useState<number[]>(() => Array.from({ length: 30 }, () => 0));
+    const [tempBuf, setTempBuf] = useState<number[]>(() => Array.from({ length: 30 }, () => 0));
 
     useEffect(() => {
-        const interval = setInterval(() => {
-            const now = Date.now();
-            const newHr = Math.round(72 + Math.sin(now / 4000) * 8 + Math.random() * 4);
-            setHr(newHr);
-            setHrBuf((prev) => [...prev.slice(1), newHr]);
+        if (!patientUid) {
+            setError('No patient UID found for live vitals stream.');
+            return;
+        }
 
-            const newSpo2 = 97.2 + Math.sin(now / 6000) * 0.6 + Math.random() * 0.3;
-            setSpo2(newSpo2);
-            setSpo2Buf((prev) => [...prev.slice(1), newSpo2]);
+        setError('');
+        const unsubscribe = subscribeToPatientLiveData(
+            patientUid,
+            (next) => {
+                setSample(next);
+                if (!next) return;
+                setHrBuf((prev) => [...prev.slice(1), next.heart_rate]);
+                setSpo2Buf((prev) => [...prev.slice(1), next.spo2]);
+                setTempBuf((prev) => [...prev.slice(1), next.temperature]);
+            },
+            (err) => setError(err.message || 'Failed to read live vitals.'),
+        );
 
-            const newTemp = 36.6 + Math.sin(now / 8000) * 0.2 + Math.random() * 0.05;
-            setTemp(newTemp);
-            setTempBuf((prev) => [...prev.slice(1), newTemp]);
-        }, 1200);
-        return () => clearInterval(interval);
-    }, []);
+        return unsubscribe;
+    }, [patientUid]);
 
     const hrSpark = makePath(hrBuf, 240, 56);
     const spo2Spark = makePath(spo2Buf, 240, 56);
     const tempSpark = makePath(tempBuf, 240, 56);
+
+    const hr = sample?.heart_rate;
+    const spo2 = sample?.spo2;
+    const temp = sample?.temperature;
 
     return (
         <div className="section">
@@ -64,7 +71,7 @@ export default function Vitals() {
                         <span className="mini-tag tag-live">LIVE</span>
                     </div>
                     <div className="vital-value" style={{ color: 'var(--red)' }}>
-                        {Math.round(hr)}<span className="vital-unit">BPM</span>
+                        {hr ?? '--'}<span className="vital-unit">BPM</span>
                     </div>
                     <div className="vital-status" style={{ background: 'rgba(52,211,153,.1)', color: 'var(--green)', border: '1px solid rgba(52,211,153,.2)' }}>
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" /></svg>
@@ -98,7 +105,7 @@ export default function Vitals() {
                         <span className="mini-tag tag-live">LIVE</span>
                     </div>
                     <div className="vital-value" style={{ color: 'var(--purple)' }}>
-                        {spo2.toFixed(1)}<span className="vital-unit">%</span>
+                        {spo2 ?? '--'}<span className="vital-unit">%</span>
                     </div>
                     <div className="vital-status" style={{ background: 'rgba(52,211,153,.1)', color: 'var(--green)', border: '1px solid rgba(52,211,153,.2)' }}>
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" /></svg>
@@ -132,7 +139,7 @@ export default function Vitals() {
                         <span className="mini-tag" style={{ background: 'rgba(251,191,36,.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,.2)' }}>LM35</span>
                     </div>
                     <div className="vital-value" style={{ color: 'var(--orange)' }}>
-                        {temp.toFixed(1)}<span className="vital-unit">°C</span>
+                        {temp ?? '--'}<span className="vital-unit">°C</span>
                     </div>
                     <div className="vital-status" style={{ background: 'rgba(52,211,153,.1)', color: 'var(--green)', border: '1px solid rgba(52,211,153,.2)' }}>
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" /></svg>
@@ -152,6 +159,11 @@ export default function Vitals() {
                     </div>
                 </div>
             </div>
+            {error ? (
+                <div style={{ marginTop: '10px' }}>
+                    <div className="auth-error">{error}</div>
+                </div>
+            ) : null}
         </div>
     );
 }

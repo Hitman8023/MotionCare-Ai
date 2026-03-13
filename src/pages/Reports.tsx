@@ -28,7 +28,7 @@ export default function Reports() {
             </div>
 
             {/* Metrics */}
-            <div className="section" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+            <div className="section stats-grid-4">
                 {metrics.map((m, i) => (
                     <div key={i} className="card" style={{ textAlign: 'center', padding: '20px' }}>
                         <div style={{ fontSize: '28px', marginBottom: '6px' }}>{m.icon}</div>
@@ -51,17 +51,17 @@ export default function Reports() {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {reports.map((r, i) => (
-                            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 80px 80px 110px', alignItems: 'center', gap: '12px', padding: '14px 16px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-light)', transition: 'all .2s', cursor: 'pointer' }}
+                            <div key={i} className="report-row" style={{ border: '1px solid var(--border-light)', transition: 'all .2s', cursor: 'pointer' }}
                                 onMouseEnter={e => { e.currentTarget.style.background = 'var(--surface-2)'; e.currentTarget.style.transform = 'translateX(4px)'; }}
                                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.transform = 'translateX(0)'; }}>
-                                <div>
+                                <div className="report-row-main">
                                     <div style={{ fontSize: '13.5px', fontWeight: 600 }}>{r.title}</div>
                                     <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{r.date}</div>
                                 </div>
-                                <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '20px', textAlign: 'center', background: `${typeColors[r.type]}15`, color: typeColors[r.type], border: `1px solid ${typeColors[r.type]}25` }}>{r.type}</span>
-                                <span style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center' }}>{r.pages} pages</span>
-                                <span style={{ fontSize: '12px', fontWeight: 700, color: r.status === 'Ready' ? 'var(--green)' : r.status === 'Approved' ? 'var(--teal)' : 'var(--orange)', textAlign: 'center' }}>{r.status}</span>
-                                <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                                <span className="report-row-type" style={{ fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '20px', textAlign: 'center', background: `${typeColors[r.type]}15`, color: typeColors[r.type], border: `1px solid ${typeColors[r.type]}25` }}>{r.type}</span>
+                                <span className="report-row-pages" style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center' }}>{r.pages} pages</span>
+                                <span className="report-row-status" style={{ fontSize: '12px', fontWeight: 700, color: r.status === 'Ready' ? 'var(--green)' : r.status === 'Approved' ? 'var(--teal)' : 'var(--orange)', textAlign: 'center' }}>{r.status}</span>
+                                <div className="report-row-actions" style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                                     <button style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>View</button>
                                     <button style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid rgba(34,211,238,.2)', background: 'rgba(34,211,238,.08)', color: 'var(--teal)', fontSize: '11px', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font)' }}>Export</button>
                                 </div>

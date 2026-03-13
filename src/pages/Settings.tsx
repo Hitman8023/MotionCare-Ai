@@ -56,7 +56,7 @@ export default function Settings() {
                             Appearance
                         </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0' }}>
+                    <div className="settings-appearance-row" style={{ padding: '12px 0' }}>
                         <div>
                             <div style={{ fontSize: '14px', fontWeight: 600 }}>Theme Mode</div>
                             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Switch between dark and light interface</div>
@@ -111,7 +111,7 @@ export default function Settings() {
                             System Information
                         </div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+                    <div className="system-info-grid">
                         {[
                             { label: 'Firmware Version', value: 'v2.4.1' },
                             { label: 'App Version', value: 'v1.0.0' },
