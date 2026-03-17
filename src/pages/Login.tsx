@@ -54,7 +54,7 @@ export default function Login({ onLogin }: LoginProps) {
         try {
             const user = await signInUser(loginEmail, loginPassword, loginRole);
             onLogin(user);
-            navigate('/', { replace: true });
+            navigate(user.needsOnboarding ? '/onboarding' : '/', { replace: true });
         } catch (err: unknown) {
             setLoginError((err as Error).message ?? 'Sign-in failed. Please try again.');
         } finally {
@@ -88,7 +88,7 @@ export default function Login({ onLogin }: LoginProps) {
             setSignupSuccess('Account created! Signing you in…');
             setTimeout(() => {
                 onLogin(user);
-                navigate('/', { replace: true });
+                navigate(user.needsOnboarding ? '/onboarding' : '/', { replace: true });
             }, 800);
         } catch (err: unknown) {
             setSignupError((err as Error).message ?? 'Registration failed. Please try again.');
