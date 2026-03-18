@@ -7,22 +7,14 @@ type LoginProps = {
     onLogin: (user: SessionUser) => void;
 };
 
-const DEMO_EMAIL: Record<UserRole, string> = {
-    doctor: 'doctor@motioncare.ai',
-    patient: 'patient@motioncare.ai',
-};
-const DEMO_PASS: Record<UserRole, string> = {
-    doctor: 'doctor123',
-    patient: 'patient123',
-};
-
 export default function Login({ onLogin }: LoginProps) {
     const [mode, setMode] = useState<'signin' | 'signup'>('signin');
 
     // — sign-in state —
     const [loginRole, setLoginRole] = useState<UserRole>('doctor');
-    const [loginEmail, setLoginEmail] = useState(DEMO_EMAIL.doctor);
-    const [loginPassword, setLoginPassword] = useState(DEMO_PASS.doctor);
+    const [loginEmail, setLoginEmail] = useState('');
+    const [loginPassword, setLoginPassword] = useState('');
+    const [showLoginPassword, setShowLoginPassword] = useState(false);
     const [loginError, setLoginError] = useState('');
     const [loginLoading, setLoginLoading] = useState(false);
 
@@ -32,6 +24,8 @@ export default function Login({ onLogin }: LoginProps) {
     const [signupEmail, setSignupEmail] = useState('');
     const [signupPassword, setSignupPassword] = useState('');
     const [signupConfirm, setSignupConfirm] = useState('');
+    const [showSignupPassword, setShowSignupPassword] = useState(false);
+    const [showSignupConfirm, setShowSignupConfirm] = useState(false);
     const [signupError, setSignupError] = useState('');
     const [signupSuccess, setSignupSuccess] = useState('');
     const [signupLoading, setSignupLoading] = useState(false);
@@ -40,8 +34,9 @@ export default function Login({ onLogin }: LoginProps) {
 
     const switchLoginRole = (nextRole: UserRole) => {
         setLoginRole(nextRole);
-        setLoginEmail(DEMO_EMAIL[nextRole]);
-        setLoginPassword(DEMO_PASS[nextRole]);
+        setLoginEmail('');
+        setLoginPassword('');
+        setShowLoginPassword(false);
         setLoginError('');
     };
 
@@ -59,7 +54,7 @@ export default function Login({ onLogin }: LoginProps) {
         try {
             const user = await signInUser(loginEmail, loginPassword, loginRole);
             onLogin(user);
-            navigate('/', { replace: true });
+            navigate(user.needsOnboarding ? '/onboarding' : '/', { replace: true });
         } catch (err: unknown) {
             setLoginError((err as Error).message ?? 'Sign-in failed. Please try again.');
         } finally {
@@ -93,7 +88,7 @@ export default function Login({ onLogin }: LoginProps) {
             setSignupSuccess('Account created! Signing you in…');
             setTimeout(() => {
                 onLogin(user);
-                navigate('/', { replace: true });
+                navigate(user.needsOnboarding ? '/onboarding' : '/', { replace: true });
             }, 800);
         } catch (err: unknown) {
             setSignupError((err as Error).message ?? 'Registration failed. Please try again.');
@@ -169,19 +164,43 @@ export default function Login({ onLogin }: LoginProps) {
                                 value={loginEmail}
                                 onChange={(e) => setLoginEmail(e.target.value)}
                                 autoComplete="username"
+                                placeholder="Enter your email"
                                 required
                             />
 
                             <label className="auth-label" htmlFor="login-password">Password</label>
-                            <input
-                                id="login-password"
-                                className="auth-input"
-                                type="password"
-                                value={loginPassword}
-                                onChange={(e) => setLoginPassword(e.target.value)}
-                                autoComplete="current-password"
-                                required
-                            />
+                            <div className="auth-password-wrap">
+                                <input
+                                    id="login-password"
+                                    className="auth-input auth-input-password"
+                                    type={showLoginPassword ? 'text' : 'password'}
+                                    value={loginPassword}
+                                    onChange={(e) => setLoginPassword(e.target.value)}
+                                    autoComplete="current-password"
+                                    placeholder="Enter your password"
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    className="auth-eye-btn"
+                                    aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
+                                    onClick={() => setShowLoginPassword((v) => !v)}
+                                >
+                                    {showLoginPassword ? (
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="m3 3 18 18" />
+                                            <path d="M10.58 10.58a2 2 0 1 0 2.83 2.83" />
+                                            <path d="M9.88 5.09A10.94 10.94 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-3.14 4.11" />
+                                            <path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+                                        </svg>
+                                    ) : (
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                                            <circle cx="12" cy="12" r="3" />
+                                        </svg>
+                                    )}
+                                </button>
+                            </div>
 
                             {loginError ? <div className="auth-error">{loginError}</div> : null}
 
@@ -246,33 +265,77 @@ export default function Login({ onLogin }: LoginProps) {
                                 value={signupEmail}
                                 onChange={(e) => setSignupEmail(e.target.value)}
                                 autoComplete="email"
-                                placeholder="you@example.com"
+                                placeholder="Enter your email"
                                 required
                             />
 
                             <label className="auth-label" htmlFor="signup-password">Password</label>
-                            <input
-                                id="signup-password"
-                                className="auth-input"
-                                type="password"
-                                value={signupPassword}
-                                onChange={(e) => setSignupPassword(e.target.value)}
-                                autoComplete="new-password"
-                                placeholder="Min. 6 characters"
-                                required
-                            />
+                            <div className="auth-password-wrap">
+                                <input
+                                    id="signup-password"
+                                    className="auth-input auth-input-password"
+                                    type={showSignupPassword ? 'text' : 'password'}
+                                    value={signupPassword}
+                                    onChange={(e) => setSignupPassword(e.target.value)}
+                                    autoComplete="new-password"
+                                    placeholder="Min. 6 characters"
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    className="auth-eye-btn"
+                                    aria-label={showSignupPassword ? 'Hide password' : 'Show password'}
+                                    onClick={() => setShowSignupPassword((v) => !v)}
+                                >
+                                    {showSignupPassword ? (
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="m3 3 18 18" />
+                                            <path d="M10.58 10.58a2 2 0 1 0 2.83 2.83" />
+                                            <path d="M9.88 5.09A10.94 10.94 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-3.14 4.11" />
+                                            <path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+                                        </svg>
+                                    ) : (
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                                            <circle cx="12" cy="12" r="3" />
+                                        </svg>
+                                    )}
+                                </button>
+                            </div>
 
                             <label className="auth-label" htmlFor="signup-confirm">Confirm Password</label>
-                            <input
-                                id="signup-confirm"
-                                className="auth-input"
-                                type="password"
-                                value={signupConfirm}
-                                onChange={(e) => setSignupConfirm(e.target.value)}
-                                autoComplete="new-password"
-                                placeholder="Repeat your password"
-                                required
-                            />
+                            <div className="auth-password-wrap">
+                                <input
+                                    id="signup-confirm"
+                                    className="auth-input auth-input-password"
+                                    type={showSignupConfirm ? 'text' : 'password'}
+                                    value={signupConfirm}
+                                    onChange={(e) => setSignupConfirm(e.target.value)}
+                                    autoComplete="new-password"
+                                    placeholder="Repeat your password"
+                                    required
+                                />
+                                <button
+                                    type="button"
+                                    className="auth-eye-btn"
+                                    aria-label={showSignupConfirm ? 'Hide password' : 'Show password'}
+                                    onClick={() => setShowSignupConfirm((v) => !v)}
+                                >
+                                    {showSignupConfirm ? (
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="m3 3 18 18" />
+                                            <path d="M10.58 10.58a2 2 0 1 0 2.83 2.83" />
+                                            <path d="M9.88 5.09A10.94 10.94 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-3.14 4.11" />
+                                            <path d="M6.61 6.61A13.53 13.53 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+                                        </svg>
+                                    ) : (
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                                            <circle cx="12" cy="12" r="3" />
+                                        </svg>
+                                    )}
+                                </button>
+                            </div>
 
                             {signupError ? <div className="auth-error">{signupError}</div> : null}
                             {signupSuccess ? <div className="auth-success">{signupSuccess}</div> : null}

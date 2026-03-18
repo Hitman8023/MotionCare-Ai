@@ -24,6 +24,7 @@ import Settings from "./pages/Settings";
 import Login from "./pages/Login";
 import DoctorDashboard from "./pages/DoctorDashboard";
 import Profile from "./pages/Profile";
+import Onboarding from "./pages/Onboarding";
 import type { SessionUser, UserRole } from "./types/auth";
 
 function AppShell({
@@ -136,7 +137,7 @@ function AppShell({
 }
 
 function AppRouter() {
-  // undefined = still resolving auth state (show loading screen)
+  // undefined = still resolving auth state (show loading spinner)
   const [session, setSession] = useState<SessionUser | null | undefined>(
     undefined,
   );
@@ -148,28 +149,44 @@ function AppRouter() {
         return;
       }
       try {
-        const snap = await getDoc(doc(db, "user_index", firebaseUser.uid));
-        if (snap.exists()) {
-          const { role, displayName } = snap.data() as {
-            role: UserRole;
-            displayName: string;
-          };
-
-          try {
-            await setActiveUid({
-              uid: firebaseUser.uid,
-              role,
-              displayName,
-              email: firebaseUser.email,
-            });
-          } catch (err) {
-            console.error("Realtime presence sync failed on auth restore", err);
-          }
-
-          setSession({ uid: firebaseUser.uid, role, displayName });
-        } else {
+        const indexSnap = await getDoc(doc(db, "user_index", firebaseUser.uid));
+        if (!indexSnap.exists()) {
           setSession(null);
+          return;
         }
+
+        const indexData = indexSnap.data() as {
+          role: UserRole;
+          displayName: string;
+          docId: string;
+        };
+
+        const { role, displayName, docId: profileDocId } = indexData;
+
+        try {
+          await setActiveUid({
+            uid: firebaseUser.uid,
+            role,
+            displayName,
+            email: firebaseUser.email,
+          });
+        } catch (err) {
+          console.error("Realtime presence sync failed on auth restore", err);
+        }
+
+        let needsOnboarding = false;
+        if (role === "patient") {
+          const profileSnap = await getDoc(doc(db, "patients", profileDocId));
+          needsOnboarding = !(profileSnap.exists() && profileSnap.data()?.onboardedAt);
+        }
+
+        setSession({
+          uid: firebaseUser.uid,
+          profileDocId,
+          role,
+          displayName,
+          needsOnboarding,
+        });
       } catch {
         setSession(null);
       }
@@ -178,6 +195,16 @@ function AppRouter() {
   }, []);
 
   const handleLogin = (next: SessionUser) => setSession(next);
+
+  const handleOnboardingComplete = () => {
+    setSession((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        needsOnboarding: false,
+      };
+    });
+  };
 
   const handleLogout = async () => {
     setSession(null);
@@ -195,7 +222,7 @@ function AppRouter() {
             fontSize: "14px",
           }}
         >
-          Loading MotionCare AI…
+          Loading MotionCare AI...
         </div>
       </div>
     );
@@ -203,6 +230,7 @@ function AppRouter() {
 
   return (
     <Routes>
+      {/* Public login page */}
       <Route
         path="/login"
         element={
@@ -213,13 +241,34 @@ function AppRouter() {
           )
         }
       />
+
+      {/* Patient onboarding standalone full-screen flow */}
+      <Route
+        path="/onboarding"
+        element={
+          !session ? (
+            <Navigate to="/login" replace />
+          ) : session.role !== "patient" ? (
+            <Navigate to="/" replace />
+          ) : (
+            <Onboarding
+              session={session}
+              onComplete={handleOnboardingComplete}
+            />
+          )
+        }
+      />
+
+      {/* Main authenticated app shell */}
       <Route
         path="/*"
         element={
-          session ? (
-            <AppShell session={session} onLogout={handleLogout} />
-          ) : (
+          !session ? (
             <Navigate to="/login" replace />
+          ) : session.needsOnboarding ? (
+            <Navigate to="/onboarding" replace />
+          ) : (
+            <AppShell session={session} onLogout={handleLogout} />
           )
         }
       />

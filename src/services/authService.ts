@@ -6,7 +6,7 @@
  *  _counters/doctor                – { count: N }
  *  _counters/patient               – { count: N }
  *  user_index/{firebaseUid}        – { uid, docId, role, displayName }
- *                                     fast lookup on every sign-in
+ *                                     UID -> role doc mapping for sign-in
  * ─────────────────────────────────────────────────────────
  */
 
@@ -39,7 +39,7 @@ const DEMO_ACCOUNTS = [
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Atomically allocates the next sequential document ID, e.g. "patient_3". */
+/** Atomically allocates the next sequential document ID, e.g. "doctor_3". */
 async function allocateDocId(role: UserRole): Promise<string> {
     const prefix = role === 'doctor' ? 'doctor' : 'patient';
     const counterRef = doc(db, '_counters', prefix);
@@ -99,11 +99,37 @@ function getRoleMismatchMessage(expectedRole: UserRole): string {
         : 'Only doctor accounts can sign in on the doctor page.';
 }
 
+async function getPatientNeedsOnboarding(patientUid: string): Promise<boolean> {
+    const indexSnap = await getDoc(doc(db, 'user_index', patientUid));
+    if (!indexSnap.exists()) return true;
+    const { docId } = indexSnap.data() as { docId: string };
+    const profileSnap = await getDoc(doc(db, 'patients', docId));
+    return !(profileSnap.exists() && profileSnap.data()?.onboardedAt);
+}
+
+async function getSessionProfileByUid(
+    uid: string,
+): Promise<{ role: UserRole; displayName: string; profileDocId: string } | null> {
+    const indexSnap = await getDoc(doc(db, 'user_index', uid));
+    if (!indexSnap.exists()) return null;
+    const indexData = indexSnap.data() as {
+        role: UserRole;
+        displayName: string;
+        docId: string;
+    };
+    return {
+        role: indexData.role,
+        displayName: indexData.displayName,
+        profileDocId: indexData.docId,
+    };
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Creates a Firebase Auth user and writes a profile document into the
- * appropriate collection (doctors/doctor_N or patients/patient_N).
+ * Creates a Firebase Auth user and writes a profile document into Firestore.
+ * Doctors and patients both keep sequential role-doc IDs:
+ * doctors/{doctor_N}, patients/{patient_N}.
  */
 export async function registerUser(
     fullName: string,
@@ -123,8 +149,8 @@ export async function registerUser(
     }
 
     const uid = cred.user.uid;
-    const docId = await allocateDocId(role);
     const collectionName = role === 'doctor' ? 'doctors' : 'patients';
+    const docId = await allocateDocId(role);
 
     const profile = {
         uid,
@@ -134,7 +160,8 @@ export async function registerUser(
         createdAt: new Date().toISOString(),
     };
 
-    // Write the role-specific doc and the uid-keyed index entry in parallel
+    // Keep all role data in a single role profile document and store a minimal
+    // uid-keyed index only for auth lookup to that document.
     try {
         await Promise.all([
             setDoc(doc(db, collectionName, docId), profile),
@@ -151,12 +178,19 @@ export async function registerUser(
         console.error('Realtime presence sync failed on sign-up', err);
     }
 
-    return { uid, role, displayName };
+    return {
+        uid,
+        profileDocId: docId,
+        role,
+        displayName,
+        needsOnboarding: role === 'patient',
+    };
 }
 
 /**
- * Signs in with Firebase Auth and retrieves the user's role + display name
- * from the user_index collection.  Demo accounts are auto-seeded on first use.
+ * Signs in with Firebase Auth and resolves the user's role + display name.
+ * user_index/{uid} maps each user to their role document ID.
+ * Demo accounts are auto-seeded on first use.
  */
 export async function signInUser(
     email: string,
@@ -167,13 +201,12 @@ export async function signInUser(
 
     try {
         const cred = await signInWithEmailAndPassword(auth, normalizedEmail, password);
-        const snap = await getDoc(doc(db, 'user_index', cred.user.uid));
+        const sessionProfile = await getSessionProfileByUid(cred.user.uid);
 
-        if (!snap.exists()) {
+        if (!sessionProfile) {
             throw new Error('User profile not found. Please contact support.');
         }
-
-        const { role, displayName } = snap.data() as { role: UserRole; displayName: string };
+        const { role, displayName, profileDocId } = sessionProfile;
 
         if (expectedRole && role !== expectedRole) {
             await firebaseSignOut(auth);
@@ -191,7 +224,17 @@ export async function signInUser(
             console.error('Realtime presence sync failed on sign-in', err);
         }
 
-        return { uid: cred.user.uid, role, displayName };
+        const needsOnboarding = role === 'patient'
+            ? await getPatientNeedsOnboarding(cred.user.uid)
+            : false;
+
+        return {
+            uid: cred.user.uid,
+            profileDocId,
+            role,
+            displayName,
+            needsOnboarding,
+        };
 
     } catch (err: unknown) {
         const code = getErrorCode(err);

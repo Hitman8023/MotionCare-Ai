@@ -2748,6 +2748,8 @@ svg.sparkline {
 }
 
 .auth-input {
+  width: 100%;
+  box-sizing: border-box;
   height: 44px;
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -2762,6 +2764,35 @@ svg.sparkline {
   outline: none;
   border-color: var(--teal);
   box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
+}
+
+.auth-password-wrap {
+  position: relative;
+}
+
+.auth-input-password {
+  padding-right: 44px;
+}
+
+.auth-eye-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.auth-eye-btn:hover {
+  color: var(--text-primary);
 }
 
 .auth-error {
@@ -3320,4 +3351,566 @@ svg.sparkline {
 ::selection {
   background: rgba(34, 211, 238, 0.2);
   color: inherit;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ONBOARDING  –  multi-step patient profile setup
+   All classes are prefixed with  ob-  to avoid collisions.
+═══════════════════════════════════════════════════════════════ */
+
+/* ── Shell (full-screen centred layout) ─────────────────────── */
+.ob-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Ambient gradient blobs */
+.ob-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  pointer-events: none;
+  opacity: 0.3;
+  z-index: 0;
+}
+.ob-blob-1 {
+  width: 640px;
+  height: 640px;
+  background: radial-gradient(circle, var(--teal-deep), transparent 70%);
+  top: -220px;
+  left: -120px;
+}
+.ob-blob-2 {
+  width: 520px;
+  height: 520px;
+  background: radial-gradient(circle, var(--blue-deep), transparent 70%);
+  bottom: -180px;
+  right: -100px;
+}
+
+/* ── Card ────────────────────────────────────────────────────── */
+.ob-card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 700px;
+  background: var(--surface);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+/* ── Card header ─────────────────────────────────────────────── */
+.ob-card-header {
+  padding: 32px 40px 22px;
+  border-bottom: 1px solid var(--border-light);
+  background: linear-gradient(135deg, var(--teal-light) 0%, transparent 55%);
+}
+.ob-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.ob-logo span {
+  font-size: 17px;
+  font-weight: 700;
+  background: linear-gradient(90deg, var(--teal), var(--blue));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.ob-welcome {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+.ob-welcome strong {
+  color: var(--text-primary);
+}
+
+/* ── Progress indicator ──────────────────────────────────────── */
+.ob-progress {
+  display: flex;
+  align-items: center;
+  padding: 20px 40px;
+  gap: 0;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--surface-2);
+}
+.ob-progress-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.ob-progress-circle {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--surface-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: border-color 0.3s var(--ease), background 0.3s var(--ease),
+    color 0.3s var(--ease), box-shadow 0.3s var(--ease);
+  flex-shrink: 0;
+}
+.ob-progress-item.active .ob-progress-circle {
+  border-color: var(--teal);
+  background: var(--teal-light);
+  color: var(--teal);
+  box-shadow: 0 0 16px rgba(34, 211, 238, 0.3);
+}
+.ob-progress-item.completed .ob-progress-circle {
+  border-color: var(--green);
+  background: var(--green-light);
+  color: var(--green);
+}
+.ob-progress-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  transition: color 0.3s var(--ease);
+}
+.ob-progress-item.active .ob-progress-label {
+  color: var(--text-primary);
+}
+.ob-progress-item.completed .ob-progress-label {
+  color: var(--text-secondary);
+}
+.ob-progress-line {
+  flex: 1;
+  height: 2px;
+  background: var(--border);
+  margin: 0 6px;
+  border-radius: 2px;
+  min-width: 16px;
+  transition: background 0.4s var(--ease);
+}
+.ob-progress-line.filled {
+  background: linear-gradient(90deg, var(--green), var(--teal));
+}
+
+/* ── Step wrapper (animated on step change) ──────────────────── */
+.ob-step-wrapper {
+  padding: 32px 40px 40px;
+  animation: ob-fade-up 0.32s var(--ease);
+}
+@keyframes ob-fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+/* ── Step header ─────────────────────────────────────────────── */
+.ob-step-header {
+  margin-bottom: 26px;
+}
+.ob-step-icon {
+  font-size: 30px;
+  margin-bottom: 8px;
+  line-height: 1;
+}
+.ob-step-header h2 {
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 5px;
+}
+.ob-step-header p {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* ── Field grid ──────────────────────────────────────────────── */
+.ob-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.ob-field-full {
+  grid-column: 1 / -1;
+}
+
+/* ── Individual field ────────────────────────────────────────── */
+.ob-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ob-field > label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.ob-field input,
+.ob-field select,
+.ob-field textarea {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 10px 14px;
+  font-size: 14px;
+  font-family: var(--font);
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  outline: none;
+  resize: vertical;
+  width: 100%;
+  box-sizing: border-box;
+}
+.ob-field select {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
+.ob-field select option {
+  background: var(--surface-solid);
+  color: var(--text-primary);
+}
+.ob-field input:focus,
+.ob-field select:focus,
+.ob-field textarea:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
+}
+.ob-field.error input,
+.ob-field.error select,
+.ob-field.error textarea {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.1);
+}
+.ob-error {
+  font-size: 12px;
+  color: var(--red);
+  line-height: 1.4;
+}
+
+/* ── Radio group (Yes / No) ──────────────────────────────────── */
+.ob-radio-group {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ob-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-secondary);
+  padding: 10px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease),
+    color 0.2s var(--ease);
+  user-select: none;
+}
+.ob-radio input[type='radio'] {
+  display: none;
+}
+.ob-radio-mark {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  transition: all 0.2s var(--ease);
+  flex-shrink: 0;
+}
+.ob-radio:has(input:checked) {
+  border-color: var(--teal);
+  background: var(--teal-light);
+  color: var(--text-primary);
+}
+.ob-radio:has(input:checked) .ob-radio-mark {
+  border-color: var(--teal);
+  background: var(--teal);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
+}
+
+/* ── Doctor selection cards ──────────────────────────────────── */
+.ob-doctor-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.ob-doctor-label-row > label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.ob-suggest-btns {
+  display: flex;
+  gap: 8px;
+}
+.ob-doctor-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.ob-doctor-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: var(--surface-2);
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease),
+    box-shadow 0.2s var(--ease);
+}
+.ob-doctor-card:hover {
+  border-color: var(--border-glow);
+  background: var(--surface-3);
+}
+.ob-doctor-card.selected {
+  border-color: var(--teal);
+  background: var(--teal-light);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.08);
+}
+.ob-doctor-card input[type='radio'] {
+  display: none;
+}
+.ob-doctor-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--teal-deep), var(--blue-deep));
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.ob-doctor-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ob-doctor-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ob-doctor-specialty {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.ob-doctor-check {
+  font-size: 15px;
+  color: var(--teal);
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity 0.2s var(--ease);
+}
+.ob-doctor-check.visible {
+  opacity: 1;
+}
+.ob-doctor-loading {
+  font-size: 13px;
+  color: var(--text-muted);
+  padding: 20px 0;
+  text-align: center;
+}
+.ob-text-muted {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* ── Suggest button ──────────────────────────────────────────── */
+.ob-btn-suggest {
+  background: linear-gradient(135deg, var(--teal-deep), var(--blue-deep));
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font);
+  transition: opacity 0.2s var(--ease), transform 0.15s var(--ease);
+}
+.ob-btn-suggest:hover:not(:disabled) {
+  opacity: 0.85;
+  transform: translateY(-1px);
+}
+.ob-btn-suggest:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+.ob-btn-suggest.outline {
+  background: transparent;
+  border: 1px solid var(--border-glow);
+  color: var(--teal);
+}
+.ob-suggest-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 8px 0 0;
+}
+.ob-suggest-note strong {
+  color: var(--teal);
+}
+
+/* ── Action buttons row ──────────────────────────────────────── */
+.ob-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+.ob-btn-primary {
+  background: linear-gradient(135deg, var(--teal-deep), var(--blue-deep));
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 12px 28px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: opacity 0.2s var(--ease), transform 0.15s var(--ease);
+  box-shadow: 0 4px 14px rgba(8, 145, 178, 0.35);
+}
+.ob-btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+.ob-btn-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+.ob-btn-secondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 22px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
+}
+.ob-btn-secondary:hover:not(:disabled) {
+  border-color: var(--border-glow);
+  color: var(--text-primary);
+}
+.ob-btn-secondary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── Submit spinner ──────────────────────────────────────────── */
+.ob-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: ob-spin 0.65s linear infinite;
+}
+@keyframes ob-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Submit error banner ─────────────────────────────────────── */
+.ob-submit-error {
+  color: var(--red);
+  font-size: 13px;
+  margin: 14px 0 0;
+  text-align: center;
+  padding: 10px 16px;
+  background: var(--red-light);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  border-radius: var(--radius-sm);
+}
+
+/* ── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .ob-card-header,
+  .ob-step-wrapper {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+  .ob-progress {
+    padding: 16px 20px;
+    gap: 4px;
+  }
+  .ob-progress-label {
+    display: none;
+  }
+  .ob-field-grid {
+    grid-template-columns: 1fr;
+  }
+  .ob-actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .ob-btn-primary,
+  .ob-btn-secondary {
+    justify-content: center;
+    width: 100%;
+  }
+}
+
+/* Light-theme overrides */
+[data-theme='light'] .ob-card {
+  background: rgba(255, 255, 255, 0.9);
+}
+[data-theme='light'] .ob-blob-1 {
+  opacity: 0.18;
+}
+[data-theme='light'] .ob-blob-2 {
+  opacity: 0.15;
 }
