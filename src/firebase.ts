@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getDatabase } from 'firebase/database';
+import { getAnalytics, isSupported, type Analytics } from 'firebase/analytics';
 
 const firebaseConfig = {
     apiKey: 'AIzaSyBhPQ7cT6b6XF6rrF9-8G0i0agH94JZ0TE',
@@ -19,3 +20,10 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const realtimeDb = getDatabase(app);
+
+export const analyticsPromise: Promise<Analytics | null> =
+    typeof window !== 'undefined'
+        ? isSupported()
+              .then((supported) => (supported ? getAnalytics(app) : null))
+              .catch(() => null)
+        : Promise.resolve(null);

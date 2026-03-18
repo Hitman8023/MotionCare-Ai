@@ -1,6 +1,148 @@
 import { onValue, ref, set, update } from 'firebase/database';
 import { realtimeDb } from '../firebase';
+import type { UserRole } from '../types/auth';
 import type { HistoryBucket, LiveDataMap, SensorAggregate, SensorSample } from '../types/sensor';
+
+function toNumber(value: unknown, fallback = 0): number {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) return parsed;
+    }
+    return fallback;
+}
+
+function pickFirst(obj: Record<string, unknown>, keys: string[]): unknown {
+    for (const key of keys) {
+        if (key in obj) return obj[key];
+    }
+    return undefined;
+}
+
+function normalizeSensorSample(raw: unknown): SensorSample | null {
+    if (!raw || typeof raw !== 'object') return null;
+
+    const data = raw as Record<string, unknown>;
+    const timestampRaw = pickFirst(data, ['timestamp', 'ts', 'time']);
+    const timestamp =
+        typeof timestampRaw === 'string' && timestampRaw.trim().length > 0
+            ? timestampRaw
+            : new Date().toISOString();
+
+    return {
+        timestamp,
+        temperature: toNumber(
+            pickFirst(data, ['lm35_temp', 'lm35', 'lm_35']),
+        ),
+        heart_rate: toNumber(pickFirst(data, ['heart_rate', 'heartRate', 'hr', 'bpm'])),
+        spo2: toNumber(pickFirst(data, ['spo2', 'SpO2', 'oxygen', 'oxygen_saturation'])),
+        acc_x: toNumber(pickFirst(data, ['acc_x', 'accX', 'ax'])),
+        acc_y: toNumber(pickFirst(data, ['acc_y', 'accY', 'ay'])),
+        acc_z: toNumber(pickFirst(data, ['acc_z', 'accZ', 'az'])),
+        gyro_x: toNumber(pickFirst(data, ['gyro_x', 'gyroX', 'gx'])),
+        gyro_y: toNumber(pickFirst(data, ['gyro_y', 'gyroY', 'gy'])),
+        gyro_z: toNumber(pickFirst(data, ['gyro_z', 'gyroZ', 'gz'])),
+    };
+}
+
+function normalizeLiveDataMap(raw: unknown): LiveDataMap {
+    if (!raw || typeof raw !== 'object') return {};
+
+    const map = raw as Record<string, unknown>;
+    const normalized: LiveDataMap = {};
+
+    Object.entries(map).forEach(([uid, sample]) => {
+        const next = normalizeSensorSample(sample);
+        if (next) normalized[uid] = next;
+    });
+
+    return normalized;
+}
+
+function hasAnyFulfilled(results: PromiseSettledResult<unknown>[]): boolean {
+    return results.some((result) => result.status === 'fulfilled');
+}
+
+function logRejectedWrites(context: string, results: PromiseSettledResult<unknown>[]): void {
+    results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+            // Helps diagnose RTDB rule/path issues without breaking auth UX.
+            console.error(`${context} write[${index}] failed`, result.reason);
+        }
+    });
+}
+
+export async function setActiveUid(user: {
+    uid: string;
+    role: UserRole;
+    displayName: string;
+    email?: string | null;
+}): Promise<void> {
+    const timestamp = new Date().toISOString();
+
+    const results = await Promise.allSettled([
+        set(ref(realtimeDb, `users/${user.uid}`), {
+            uid: user.uid,
+            role: user.role,
+            displayName: user.displayName,
+            email: user.email ?? null,
+            isActive: true,
+            lastAuthAt: timestamp,
+        }),
+        set(ref(realtimeDb, `presence/${user.uid}`), {
+            uid: user.uid,
+            isActive: true,
+            updatedAt: timestamp,
+        }),
+        set(ref(realtimeDb, `activeUsers/${user.uid}`), {
+            uid: user.uid,
+            isActive: true,
+            updatedAt: timestamp,
+        }),
+        set(ref(realtimeDb, 'active_uid'), {
+            uid: user.uid,
+            updatedAt: timestamp,
+        }),
+    ]);
+
+    if (!hasAnyFulfilled(results)) {
+        throw new Error('Unable to write active user to Realtime Database.');
+    }
+
+    logRejectedWrites('setActiveUid', results);
+}
+
+export async function clearActiveUid(uid?: string): Promise<void> {
+    const timestamp = new Date().toISOString();
+    const payload: { uid: string | null; updatedAt: string; clearedFor?: string } = {
+        uid: null,
+        updatedAt: timestamp,
+    };
+
+    if (uid) {
+        payload.clearedFor = uid;
+
+        const results = await Promise.allSettled([
+            set(ref(realtimeDb, `presence/${uid}`), {
+                uid,
+                isActive: false,
+                updatedAt: timestamp,
+            }),
+            set(ref(realtimeDb, `activeUsers/${uid}`), null),
+            update(ref(realtimeDb, `users/${uid}`), {
+                isActive: false,
+                lastAuthAt: timestamp,
+            }),
+            set(ref(realtimeDb, 'active_uid'), payload),
+        ]);
+
+        logRejectedWrites('clearActiveUid', results);
+
+        return;
+    }
+
+    await set(ref(realtimeDb, 'active_uid'), payload);
+}
 
 export function subscribeToPatientLiveData(
     patientUid: string,
@@ -11,7 +153,7 @@ export function subscribeToPatientLiveData(
     return onValue(
         liveRef,
         (snapshot) => {
-            onData((snapshot.val() as SensorSample | null) ?? null);
+            onData(normalizeSensorSample(snapshot.val()));
         },
         (error) => {
             if (onError) onError(error as Error);
@@ -27,7 +169,7 @@ export function subscribeToAllPatientsLiveData(
     return onValue(
         liveRootRef,
         (snapshot) => {
-            onData((snapshot.val() as LiveDataMap | null) ?? {});
+            onData(normalizeLiveDataMap(snapshot.val()));
         },
         (error) => {
             if (onError) onError(error as Error);

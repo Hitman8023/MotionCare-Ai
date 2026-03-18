@@ -112,7 +112,7 @@ export default function LiveMonitoring({ role, patientUid }: LiveMonitoringProps
                         </div>
                     </div>
 
-                    <MotionPanel />
+                    <MotionPanel patientUid={role === 'patient' ? patientUid : undefined} />
 
                     <div className="section monitor-grid">
                         {monitors.map((m, i) => (

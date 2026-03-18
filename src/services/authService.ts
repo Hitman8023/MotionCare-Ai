@@ -17,6 +17,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, runTransaction } from 'firebase/firestore';
 import { auth, db } from '../firebase';
+import { clearActiveUid, setActiveUid } from './realtimeDbService';
 import type { UserRole, SessionUser } from '../types/auth';
 
 // ─── Demo accounts – auto-seeded into Firebase on first use ───────────────────
@@ -144,6 +145,12 @@ export async function registerUser(
         throw new Error(mapFirebaseError(code));
     }
 
+    try {
+        await setActiveUid({ uid, role, displayName, email: normalizedEmail });
+    } catch (err) {
+        console.error('Realtime presence sync failed on sign-up', err);
+    }
+
     return { uid, role, displayName };
 }
 
@@ -173,6 +180,17 @@ export async function signInUser(
             throw new Error(getRoleMismatchMessage(expectedRole));
         }
 
+        try {
+            await setActiveUid({
+                uid: cred.user.uid,
+                role,
+                displayName,
+                email: cred.user.email ?? normalizedEmail,
+            });
+        } catch (err) {
+            console.error('Realtime presence sync failed on sign-in', err);
+        }
+
         return { uid: cred.user.uid, role, displayName };
 
     } catch (err: unknown) {
@@ -197,5 +215,11 @@ export async function signInUser(
 
 /** Signs out the current Firebase Auth user. */
 export async function signOutUser(): Promise<void> {
+    const currentUid = auth.currentUser?.uid;
     await firebaseSignOut(auth);
+    try {
+        await clearActiveUid(currentUid);
+    } catch (err) {
+        console.error('Realtime presence clear failed on sign-out', err);
+    }
 }

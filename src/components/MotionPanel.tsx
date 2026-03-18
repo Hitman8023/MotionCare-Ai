@@ -1,6 +1,13 @@
 import { useEffect, useState, useRef } from 'react';
+import {
+    ExerciseDetector,
+    type ExerciseDetectionOutput,
+    type ExerciseType,
+} from '../services/exerciseDetection';
+import { subscribeToPatientLiveData } from '../services/realtimeDbService';
+import type { SensorSample as RealtimeSensorSample } from '../types/sensor';
 
-type SensorSample = {
+type MotionSensorSample = {
     ax: number;
     ay: number;
     az: number;
@@ -25,6 +32,72 @@ declare global {
 }
 
 const clamp = (val: number, min: number, max: number) => Math.min(max, Math.max(min, val));
+
+const EXERCISE_META: Record<ExerciseType, { label: string; cue: string; targetAngle: number }> = {
+    wrist_flexion: {
+        label: 'Wrist Flexion',
+        cue: 'Bend wrist downward',
+        targetAngle: -40,
+    },
+    wrist_extension: {
+        label: 'Wrist Extension',
+        cue: 'Bend wrist upward',
+        targetAngle: 40,
+    },
+    wrist_rotation: {
+        label: 'Wrist Rotation',
+        cue: 'Rotate wrist in a controlled motion',
+        targetAngle: 60,
+    },
+    radial_deviation: {
+        label: 'Radial Deviation',
+        cue: 'Tilt wrist toward thumb side',
+        targetAngle: 20,
+    },
+    ulnar_deviation: {
+        label: 'Ulnar Deviation',
+        cue: 'Tilt wrist toward little finger side',
+        targetAngle: -25,
+    },
+};
+
+type DirectionLabel =
+    | 'UP'
+    | 'DOWN'
+    | 'LEFT'
+    | 'RIGHT'
+    | 'CLOCKWISE'
+    | 'COUNTERCLOCKWISE'
+    | 'STILL';
+
+const EXERCISE_DIRECTION: Record<ExerciseType, DirectionLabel> = {
+    wrist_flexion: 'DOWN',
+    wrist_extension: 'UP',
+    wrist_rotation: 'CLOCKWISE',
+    radial_deviation: 'RIGHT',
+    ulnar_deviation: 'LEFT',
+};
+
+function resolveUserDirection(exercise: ExerciseType, sample: MotionSensorSample): DirectionLabel {
+    switch (exercise) {
+        case 'wrist_flexion':
+        case 'wrist_extension':
+            if (sample.gx > 8) return 'UP';
+            if (sample.gx < -8) return 'DOWN';
+            return 'STILL';
+        case 'radial_deviation':
+        case 'ulnar_deviation':
+            if (sample.gy > 8) return 'RIGHT';
+            if (sample.gy < -8) return 'LEFT';
+            return 'STILL';
+        case 'wrist_rotation':
+            if (sample.gz > 10) return 'CLOCKWISE';
+            if (sample.gz < -10) return 'COUNTERCLOCKWISE';
+            return 'STILL';
+        default:
+            return 'STILL';
+    }
+}
 
 function makePath(data: number[], w: number, h: number, pad = 4) {
     const min = Math.min(...data) - 2;
@@ -112,9 +185,14 @@ function ArmModel({ idPrefix }: { idPrefix: string }) {
         </>
     );
 }
+type MotionPanelProps = {
+    patientUid?: string;
+};
 
-export default function MotionPanel() {
-    const [angle, setAngle] = useState(35);
+export default function MotionPanel({ patientUid }: MotionPanelProps) {
+    const [selectedExercise, setSelectedExercise] = useState<ExerciseType>('wrist_flexion');
+    const [isExerciseMenuOpen, setIsExerciseMenuOpen] = useState(false);
+    const [angle, setAngle] = useState(0);
     const [ax, setAx] = useState(0);
     const [ay, setAy] = useState(0);
     const [az, setAz] = useState(0.93);
@@ -127,15 +205,65 @@ export default function MotionPanel() {
     const [renderScaleY, setRenderScaleY] = useState(1);
     const [isFullscreenSim, setIsFullscreenSim] = useState(false);
     const [sensorMode, setSensorMode] = useState<'SIMULATED' | 'LIVE SENSOR'>('SIMULATED');
-    const [guidance, setGuidance] = useState('Hold steady in the center target');
-    const [direction, setDirection] = useState('CENTERED');
-    const [repCount, setRepCount] = useState(18);
+    const [guidance, setGuidance] = useState('Select exercise and start movement');
+    const [direction, setDirection] = useState<DirectionLabel>('STILL');
+    const [repCount, setRepCount] = useState(0);
+    const [analysis, setAnalysis] = useState<ExerciseDetectionOutput>({
+        exercise: 'wrist_flexion',
+        current_angle: 0,
+        target_angle: EXERCISE_META.wrist_flexion.targetAngle,
+        repetitions: 0,
+        stability_score: 100,
+        movement_quality: 'incorrect',
+    });
     const [motBuf, setMotBuf] = useState<number[]>(() =>
         Array.from({ length: 40 }, (_, i) => Math.sin(i * 0.4) * 20 + 24 + Math.random() * 8)
     );
-    const sampleRef = useRef<SensorSample>({ ax: 0, ay: 0, az: 0.93, gx: 12.4, gy: -5.7, gz: 0 });
+    const sampleRef = useRef<MotionSensorSample>({ ax: 0, ay: 0, az: 0.93, gx: 12.4, gy: -5.7, gz: 0 });
+    const detectorRef = useRef<ExerciseDetector>(new ExerciseDetector('wrist_flexion'));
     const motionTrendRef = useRef(0);
     const lastLiveSampleAtRef = useRef(0);
+    const exerciseMenuRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        detectorRef.current.setExercise(selectedExercise, true);
+        setIsExerciseMenuOpen(false);
+        setRepCount(0);
+        setAnalysis({
+            exercise: selectedExercise,
+            current_angle: 0,
+            target_angle: EXERCISE_META[selectedExercise].targetAngle,
+            repetitions: 0,
+            stability_score: 100,
+            movement_quality: 'incorrect',
+        });
+        setGuidance(`Selected ${EXERCISE_META[selectedExercise].label}. ${EXERCISE_META[selectedExercise].cue}.`);
+    }, [selectedExercise]);
+
+    useEffect(() => {
+        const onDocClick = (event: MouseEvent) => {
+            if (!exerciseMenuRef.current) {
+                return;
+            }
+            const target = event.target;
+            if (target instanceof Node && !exerciseMenuRef.current.contains(target)) {
+                setIsExerciseMenuOpen(false);
+            }
+        };
+
+        const onEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setIsExerciseMenuOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', onDocClick);
+        document.addEventListener('keydown', onEscape);
+        return () => {
+            document.removeEventListener('mousedown', onDocClick);
+            document.removeEventListener('keydown', onEscape);
+        };
+    }, []);
 
     useEffect(() => {
         const interval = setInterval(() => {
@@ -146,7 +274,7 @@ export default function MotionPanel() {
     }, []);
 
     useEffect(() => {
-        const pushSample = (sample: SensorSample, live = false) => {
+        const pushSample = (sample: MotionSensorSample, live = false) => {
             sampleRef.current = {
                 ax: clamp(sample.ax, -2, 2),
                 ay: clamp(sample.ay, -2, 2),
@@ -160,6 +288,30 @@ export default function MotionPanel() {
                 setSensorMode('LIVE SENSOR');
             }
         };
+
+        let unsubscribeDb = () => {};
+        if (patientUid) {
+            unsubscribeDb = subscribeToPatientLiveData(
+                patientUid,
+                (next: RealtimeSensorSample | null) => {
+                    if (!next) return;
+                    pushSample(
+                        {
+                            ax: next.acc_x,
+                            ay: next.acc_y,
+                            az: next.acc_z,
+                            gx: next.gyro_x,
+                            gy: next.gyro_y,
+                            gz: next.gyro_z,
+                        },
+                        true,
+                    );
+                },
+                () => {
+                    // Keep existing browser/device/sim fallback when RTDB stream errors.
+                },
+            );
+        }
 
         const onCustomSensor = (event: CustomEvent<SensorPayload>) => {
             const payload = event.detail;
@@ -205,7 +357,7 @@ export default function MotionPanel() {
         }
 
         const simInterval = setInterval(() => {
-            if (Date.now() - lastLiveSampleAtRef.current < 1200) {
+            if (Date.now() - lastLiveSampleAtRef.current < 5000) {
                 return;
             }
             setSensorMode('SIMULATED');
@@ -219,9 +371,6 @@ export default function MotionPanel() {
                 gy: Math.cos(t * 0.9) * 13,
                 gz: Math.sin(t * 1.3) * 15,
             });
-            if (Math.sin(t) > 0.9 && Math.sin(t - 0.03) <= 0.9) {
-                setRepCount((c) => c + 1);
-            }
         }, 80);
 
         const renderInterval = setInterval(() => {
@@ -242,31 +391,44 @@ export default function MotionPanel() {
             setGx(current.gx);
             setGy(current.gy);
             setGz(current.gz);
-            setAngle(Math.round(35 + current.ax * 18));
+
+            const nextResult = detectorRef.current.update({
+                timestampMs: Date.now(),
+                accelX: current.ax,
+                accelY: current.ay,
+                accelZ: current.az,
+                gyroX: current.gx,
+                gyroY: current.gy,
+                gyroZ: current.gz,
+            });
+            setAnalysis(nextResult);
+            setRepCount(nextResult.repetitions);
+            setAngle(nextResult.current_angle);
 
             const absX = Math.abs(targetX);
             const absY = Math.abs(targetY);
             const centered = absX <= 18 && absY <= 18;
-            if (centered) {
-                setDirection('CENTERED');
-                setGuidance('Perfect. Keep your hand inside the center target.');
+            const expectedDirection = EXERCISE_DIRECTION[selectedExercise];
+            const userDirection = resolveUserDirection(selectedExercise, current);
+            setDirection(userDirection);
+
+            if (userDirection === 'STILL' || centered) {
+                setGuidance(`Move ${expectedDirection.toLowerCase()} for ${selectedExerciseMeta.label}.`);
+            } else if (userDirection === expectedDirection) {
+                setGuidance(`Correct direction (${userDirection}). Continue and return to neutral for rep count.`);
             } else {
-                const xHint = targetX < -18 ? 'right' : targetX > 18 ? 'left' : '';
-                const yHint = targetY < -18 ? 'down' : targetY > 18 ? 'up' : '';
-                const joinWord = xHint && yHint ? ' and ' : '';
-                const moveHint = `${xHint}${joinWord}${yHint}`.trim();
-                setDirection(targetX < -18 ? 'LEFT' : targetX > 18 ? 'RIGHT' : targetY < -18 ? 'UP' : 'DOWN');
-                setGuidance(`Adjust hand ${moveHint} to match the ideal position.`);
+                setGuidance(`Incorrect direction (${userDirection}). Move ${expectedDirection.toLowerCase()} instead.`);
             }
         }, 33);
 
         return () => {
             clearInterval(simInterval);
             clearInterval(renderInterval);
+            unsubscribeDb();
             window.removeEventListener('motioncare-sensor', onCustomSensor as EventListener);
             window.removeEventListener('devicemotion', onDeviceMotion);
         };
-    }, []);
+    }, [patientUid, selectedExercise]);
 
     useEffect(() => {
         if (!isFullscreenSim) {
@@ -284,6 +446,12 @@ export default function MotionPanel() {
     const motSpark = makePath(motBuf, 320, 48);
     const fmtSigned = (value: number, digits: number) => `${value > 0 ? '+' : ''}${value.toFixed(digits)}`;
     const handTransform = `translate(${renderX}px, ${renderY}px) rotate(${renderTilt}deg) scaleY(${renderScaleY})`;
+    const selectedExerciseMeta = EXERCISE_META[selectedExercise];
+    const expectedDirection = EXERCISE_DIRECTION[selectedExercise];
+    const isDirectionCorrect = direction === expectedDirection;
+    const angleDeviation = analysis.current_angle - analysis.target_angle;
+    const qualityColor = isDirectionCorrect ? 'var(--green)' : 'var(--orange)';
+    const qualityLabel = isDirectionCorrect ? 'Correct Direction' : 'Incorrect Direction';
 
     return (
         <>
@@ -304,6 +472,56 @@ export default function MotionPanel() {
                     <span className="mini-tag tag-live">LIVE</span>
                 </div>
 
+                <div className="exercise-select-row">
+                    <span className="exercise-select-label">Exercise</span>
+                    <div className="exercise-select-menu" ref={exerciseMenuRef}>
+                        <button
+                            type="button"
+                            className="exercise-select-trigger"
+                            aria-haspopup="listbox"
+                            aria-expanded={isExerciseMenuOpen}
+                            onClick={() => setIsExerciseMenuOpen((prev) => !prev)}
+                        >
+                            <span>{selectedExerciseMeta.label}</span>
+                            <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                style={{ transform: isExerciseMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform .2s ease' }}
+                            >
+                                <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                        </button>
+
+                        {isExerciseMenuOpen && (
+                            <div className="exercise-select-options" role="listbox" aria-label="Exercise list">
+                                {Object.entries(EXERCISE_META).map(([value, item]) => {
+                                    const active = value === selectedExercise;
+                                    return (
+                                        <button
+                                            key={value}
+                                            type="button"
+                                            className={`exercise-option ${active ? 'active' : ''}`}
+                                            role="option"
+                                            aria-selected={active}
+                                            onClick={() => setSelectedExercise(value as ExerciseType)}
+                                        >
+                                            <span className="exercise-option-label">{item.label}</span>
+                                            <span className="exercise-option-cue">{item.cue}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                    <span className="exercise-target-chip">Target: {analysis.target_angle}°</span>
+                </div>
+
                 <div className="motion-card-grid">
                     <div>
                         <button
@@ -321,12 +539,12 @@ export default function MotionPanel() {
                         </button>
                         <div style={{ marginTop: '12px', textAlign: 'center' }}>
                             <div className="angle-big">{angle}°</div>
-                            <div className="angle-axis">Flexion Angle</div>
+                            <div className="angle-axis">{selectedExerciseMeta.label} Angle</div>
                             <div className="hand-guidance-text">{guidance}</div>
                         </div>
                     </div>
                     <div>
-                        <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', letterSpacing: '.1em', textTransform: 'uppercase' as const, marginBottom: '8px' }}>Sensor Readings</div>
+                        <div className="sensor-heading">Sensor Readings</div>
                         <div className="sensor-row"><span className="sensor-label">Accel X</span><span className="sensor-value">{fmtSigned(ax, 2)} g</span></div>
                         <div className="sensor-row"><span className="sensor-label">Accel Y</span><span className="sensor-value">{fmtSigned(ay, 2)} g</span></div>
                         <div className="sensor-row"><span className="sensor-label">Accel Z</span><span className="sensor-value">{fmtSigned(az, 2)} g</span></div>
@@ -342,16 +560,17 @@ export default function MotionPanel() {
                 </div>
 
                 <div className="sensor-runtime-meta">
-                    <span className="mini-tag" style={{ background: sensorMode === 'LIVE SENSOR' ? 'rgba(52,211,153,.12)' : 'rgba(251,191,36,.12)', color: sensorMode === 'LIVE SENSOR' ? 'var(--green)' : 'var(--orange)', border: `1px solid ${sensorMode === 'LIVE SENSOR' ? 'rgba(52,211,153,.35)' : 'rgba(251,191,36,.35)'}` }}>{sensorMode}</span>
-                    <span className="mini-tag" style={{ background: 'rgba(96,165,250,.12)', color: 'var(--blue)', border: '1px solid rgba(96,165,250,.3)' }}>Direction: {direction}</span>
-                    <span className="mini-tag" style={{ background: 'rgba(167,139,250,.12)', color: 'var(--purple)', border: '1px solid rgba(167,139,250,.3)' }}>Tap hand for fullscreen</span>
+                    <span className={`runtime-pill ${sensorMode === 'LIVE SENSOR' ? 'runtime-pill-live' : 'runtime-pill-sim'}`}>{sensorMode}</span>
+                    <span className="runtime-pill runtime-pill-direction">Correct Direction: {expectedDirection}</span>
+                    <span className="runtime-pill runtime-pill-direction">Your Direction: {direction}</span>
+                    <span className="runtime-pill runtime-pill-exercise">{selectedExerciseMeta.label}</span>
                 </div>
 
                 <div className="divider"></div>
-                <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--text-muted)', letterSpacing: '.1em', textTransform: 'uppercase' as const, marginBottom: '8px' }}>Movement Stability</div>
+                <div className="sensor-heading">Movement Stability</div>
                 <div className="stability-bar-wrap">
-                    <div className="stability-bar-label"><span>Stability Score</span><span style={{ fontWeight: 700, color: 'var(--teal)' }}>84%</span></div>
-                    <div className="stability-bar-track"><div className="stability-bar-fill" style={{ width: '84%' }}></div></div>
+                    <div className="stability-bar-label"><span>Stability Score</span><span style={{ fontWeight: 700, color: 'var(--teal)' }}>{analysis.stability_score}%</span></div>
+                    <div className="stability-bar-track"><div className="stability-bar-fill" style={{ width: `${analysis.stability_score}%` }}></div></div>
                 </div>
                 <div className="vital-chart" style={{ marginTop: '14px' }}>
                     <svg className="sparkline" width="100%" height="48" viewBox="0 0 320 48" preserveAspectRatio="none">
@@ -381,29 +600,33 @@ export default function MotionPanel() {
                         <span className="mini-tag tag-ai">AI</span>
                     </div>
                     <div className="quality-row">
-                        <div className="quality-icon" style={{ background: 'rgba(52,211,153,.12)' }}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                        <div className="quality-icon" style={{ background: isDirectionCorrect ? 'rgba(52,211,153,.12)' : 'rgba(251,191,36,.12)' }}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isDirectionCorrect ? '#34d399' : '#fbbf24'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                         </div>
-                        <div><div className="quality-label" style={{ color: 'var(--green)' }}>Correct Movement</div><div className="quality-sub">Wrist flexion detected</div></div>
-                        <div className="quality-val" style={{ color: 'var(--green)' }}>✓</div>
+                        <div><div className="quality-label" style={{ color: qualityColor }}>{qualityLabel}</div><div className="quality-sub">Correct: {expectedDirection} · Your: {direction}</div></div>
+                        <div className="quality-val" style={{ color: qualityColor }}>{isDirectionCorrect ? '✓' : '!'}</div>
                     </div>
                     <div className="quality-row">
                         <div className="quality-icon" style={{ background: 'rgba(34,211,238,.12)' }}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
                         </div>
-                        <div><div className="quality-label" style={{ color: 'var(--teal)' }}>Stability Score</div><div className="quality-sub">Above threshold</div></div>
-                        <div className="quality-val" style={{ color: 'var(--teal)' }}>84%</div>
+                        <div><div className="quality-label" style={{ color: 'var(--teal)' }}>Stability Score</div><div className="quality-sub">{analysis.stability_score >= 70 ? 'Above threshold' : 'Needs steadier control'}</div></div>
+                        <div className="quality-val" style={{ color: 'var(--teal)' }}>{analysis.stability_score}%</div>
                     </div>
                     <div className="quality-row">
                         <div className="quality-icon" style={{ background: 'rgba(251,191,36,.12)' }}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
                         </div>
-                        <div><div className="quality-label" style={{ color: 'var(--orange)' }}>Angle Deviation</div><div className="quality-sub">3° below target range</div></div>
-                        <div className="quality-val" style={{ color: 'var(--orange)' }}>−3°</div>
+                        <div><div className="quality-label" style={{ color: 'var(--orange)' }}>Angle Deviation</div><div className="quality-sub">Difference from target angle</div></div>
+                        <div className="quality-val" style={{ color: 'var(--orange)' }}>{angleDeviation > 0 ? '+' : ''}{angleDeviation}°</div>
                     </div>
-                    <div style={{ marginTop: '14px', padding: '14px', background: 'linear-gradient(135deg, rgba(34,211,238,.06), rgba(52,211,153,.04))', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(34,211,238,.15)' }}>
-                        <div style={{ fontSize: '11px', fontWeight: 800, color: 'var(--teal)', marginBottom: '4px' }}>🤖 AI Recommendation</div>
-                        <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>Increase wrist flexion angle by 3–5°. Maintain current movement speed. Form is otherwise excellent.</div>
+                    <div className="ai-recommendation-panel">
+                        <div className="ai-recommendation-title">AI Recommendation</div>
+                        <div className="ai-recommendation-copy">
+                            {isDirectionCorrect
+                                ? `Direction is correct (${direction}). Keep controlled return to neutral for repetition counting.`
+                                : `Move ${expectedDirection.toLowerCase()} for ${selectedExerciseMeta.label}. Your current direction is ${direction}.`}
+                        </div>
                     </div>
                 </div>
 
@@ -423,11 +646,11 @@ export default function MotionPanel() {
                     </div>
                     <div className="insight-card warn">
                         <div className="insight-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg></div>
-                        <div><div className="insight-text">Hand angle is slightly below the recommended range (target: 45°).</div><div className="insight-time">12:44:51 PM</div></div>
+                        <div><div className="insight-text">Current angle {analysis.current_angle}° vs target {analysis.target_angle}° for {selectedExerciseMeta.label}.</div><div className="insight-time">Live</div></div>
                     </div>
                     <div className="insight-card success">
                         <div className="insight-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg></div>
-                        <div><div className="insight-text">Exercise movement detected as correct. Form maintained for {repCount} reps.</div><div className="insight-time">12:44:38 PM</div></div>
+                        <div><div className="insight-text">Direction check: expected {expectedDirection}, current {direction}. Correct repetitions counted: {repCount}.</div><div className="insight-time">Live</div></div>
                     </div>
                     <div className="insight-card info">
                         <div className="insight-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg></div>
@@ -463,7 +686,9 @@ export default function MotionPanel() {
                                 <div className="hand-sim-metrics">X: {fmtSigned(renderX, 0)}px</div>
                                 <div className="hand-sim-metrics">Y: {fmtSigned(renderY, 0)}px</div>
                                 <div className="hand-sim-metrics">Angle: {angle}°</div>
+                                <div className="hand-sim-metrics">Target: {analysis.target_angle}°</div>
                                 <div className="hand-sim-metrics">Direction: {direction}</div>
+                                <div className="hand-sim-metrics">Quality: {analysis.movement_quality}</div>
                             </div>
                         </div>
                     </div>

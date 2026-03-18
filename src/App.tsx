@@ -11,6 +11,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
 import { signOutUser } from "./services/authService";
+import { setActiveUid } from "./services/realtimeDbService";
 import TopNav from "./components/TopNav";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
@@ -125,7 +126,7 @@ function AppShell({
             }
           />
           <Route path="/reports" element={<Reports />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/settings" element={<Settings session={session} />} />
           <Route path="/profile" element={<Profile session={session} />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -153,6 +154,18 @@ function AppRouter() {
             role: UserRole;
             displayName: string;
           };
+
+          try {
+            await setActiveUid({
+              uid: firebaseUser.uid,
+              role,
+              displayName,
+              email: firebaseUser.email,
+            });
+          } catch (err) {
+            console.error("Realtime presence sync failed on auth restore", err);
+          }
+
           setSession({ uid: firebaseUser.uid, role, displayName });
         } else {
           setSession(null);

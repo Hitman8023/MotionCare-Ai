@@ -259,6 +259,52 @@
   border-color: rgba(165, 243, 252, 0.3);
 }
 
+[data-theme="light"] .exercise-select-row {
+  background: linear-gradient(
+    135deg,
+    rgba(8, 145, 178, 0.08),
+    rgba(139, 92, 246, 0.06)
+  );
+}
+
+[data-theme="light"] .ai-recommendation-panel {
+  background: linear-gradient(
+    135deg,
+    rgba(8, 145, 178, 0.08),
+    rgba(16, 185, 129, 0.06)
+  );
+}
+
+[data-theme="light"] .exercise-select-trigger {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98));
+  color: #0f172a;
+  border-color: rgba(148, 163, 184, 0.32);
+}
+
+[data-theme="light"] .exercise-select-options {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(8, 145, 178, 0.2);
+  box-shadow:
+    0 14px 26px rgba(15, 23, 42, 0.14),
+    0 0 0 1px rgba(148, 163, 184, 0.08) inset;
+}
+
+[data-theme="light"] .exercise-option {
+  background: rgba(241, 245, 249, 0.88);
+}
+
+[data-theme="light"] .exercise-option:hover {
+  background: rgba(226, 232, 240, 0.9);
+}
+
+[data-theme="light"] .exercise-option.active {
+  background: linear-gradient(
+    135deg,
+    rgba(8, 145, 178, 0.2),
+    rgba(59, 130, 246, 0.16)
+  );
+}
+
 /* Light therapy gradient text fix */
 [data-theme="light"] .nav-logo-text {
   background: linear-gradient(135deg, #1e293b, #475569);
@@ -1554,6 +1600,210 @@ canvas {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.exercise-select-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  background: linear-gradient(
+    135deg,
+    rgba(34, 211, 238, 0.07),
+    rgba(167, 139, 250, 0.05)
+  );
+}
+
+.exercise-select-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.exercise-select-menu {
+  position: relative;
+  min-width: 250px;
+}
+
+.exercise-select-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.85));
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font);
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.08);
+  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease),
+    transform 0.2s var(--ease);
+}
+
+.exercise-select-trigger:hover {
+  border-color: rgba(34, 211, 238, 0.42);
+  transform: translateY(-1px);
+}
+
+.exercise-select-trigger:focus-visible {
+  outline: none;
+  border-color: rgba(34, 211, 238, 0.55);
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.18);
+}
+
+.exercise-select-options {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(34, 211, 238, 0.24);
+  background: rgba(15, 23, 42, 0.98);
+  box-shadow:
+    0 16px 30px rgba(2, 6, 23, 0.65),
+    0 0 0 1px rgba(148, 163, 184, 0.08) inset;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.exercise-option {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: rgba(30, 41, 59, 0.55);
+  padding: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.2s var(--ease), background-color 0.2s var(--ease),
+    transform 0.2s var(--ease);
+}
+
+.exercise-option:hover {
+  border-color: rgba(34, 211, 238, 0.28);
+  background: rgba(30, 41, 59, 0.92);
+  transform: translateX(2px);
+}
+
+.exercise-option.active {
+  border-color: rgba(34, 211, 238, 0.42);
+  background: linear-gradient(
+    135deg,
+    rgba(34, 211, 238, 0.2),
+    rgba(96, 165, 250, 0.18)
+  );
+}
+
+.exercise-option-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.exercise-option-cue {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.exercise-target-chip {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 7px 10px;
+  border-radius: 999px;
+  color: var(--teal);
+  border: 1px solid rgba(34, 211, 238, 0.28);
+  background: rgba(34, 211, 238, 0.1);
+}
+
+.sensor-heading {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.runtime-pill {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+
+.runtime-pill-live {
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--green);
+  border: 1px solid rgba(52, 211, 153, 0.35);
+}
+
+.runtime-pill-sim {
+  background: rgba(251, 191, 36, 0.12);
+  color: var(--orange);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+
+.runtime-pill-direction {
+  background: rgba(96, 165, 250, 0.12);
+  color: var(--blue);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+}
+
+.runtime-pill-exercise {
+  background: rgba(167, 139, 250, 0.12);
+  color: var(--purple);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+}
+
+.ai-recommendation-panel {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(34, 211, 238, 0.16);
+  background: linear-gradient(
+    135deg,
+    rgba(34, 211, 238, 0.08),
+    rgba(52, 211, 153, 0.06)
+  );
+}
+
+.ai-recommendation-title {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin-bottom: 4px;
+}
+
+.ai-recommendation-copy {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.6;
 }
 
 .hand-sim-overlay {
@@ -2917,6 +3167,18 @@ svg.sparkline {
 
   .motion-card-grid {
     justify-items: center;
+  }
+
+  .exercise-select-row {
+    align-items: stretch;
+  }
+
+  .exercise-select-menu {
+    min-width: 100%;
+  }
+
+  .exercise-target-chip {
+    margin-left: 0;
   }
 
   .motion-card-grid > div:last-child {
