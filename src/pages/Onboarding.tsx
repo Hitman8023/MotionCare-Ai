@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { SessionUser } from '../types/auth';
+import { signOutUser } from '../services/authService';
 import { INITIAL_FORM_DATA, type OnboardingFormData } from '../types/onboarding';
 import { savePatientOnboarding } from '../services/onboardingService';
 import OnboardingProgress from '../components/onboarding/OnboardingProgress';
@@ -36,6 +37,19 @@ export default function Onboarding({ session, onComplete }: Props) {
     function handleStep3(medical: OnboardingFormData['medical']) {
         setFormData((prev) => ({ ...prev, medical }));
         setStep(4);
+    }
+
+    async function handleBackToLogin() {
+        if (submitting) return;
+        setSubmitError('');
+        try {
+            await signOutUser();
+            navigate('/login', { replace: true });
+        } catch (err: unknown) {
+            setSubmitError(
+                (err as Error).message ?? 'Failed to leave setup. Please try again.',
+            );
+        }
     }
 
     async function handleStep4(doctor: OnboardingFormData['doctor']) {
@@ -108,6 +122,7 @@ export default function Onboarding({ session, onComplete }: Props) {
                     {step === 1 && (
                         <Step1BasicInfo
                             data={formData.basicInfo}
+                            onBack={handleBackToLogin}
                             onNext={handleStep1}
                         />
                     )}
