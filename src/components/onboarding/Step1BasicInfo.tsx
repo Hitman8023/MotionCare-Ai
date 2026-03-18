@@ -3,6 +3,7 @@ import type { BasicInfo } from '../../types/onboarding';
 
 type Props = {
     data: BasicInfo;
+    onBack: () => void;
     onNext: (data: BasicInfo) => void;
 };
 
@@ -10,7 +11,7 @@ type FieldErrors = Partial<Record<keyof BasicInfo, string>>;
 
 const PHONE_RE = /^\+?[0-9\s\-]{7,15}$/;
 
-export default function Step1BasicInfo({ data, onNext }: Props) {
+export default function Step1BasicInfo({ data, onBack, onNext }: Props) {
     const [form, setForm]     = useState<BasicInfo>(data);
     const [errors, setErrors] = useState<FieldErrors>({});
 
@@ -121,6 +122,9 @@ export default function Step1BasicInfo({ data, onNext }: Props) {
             </div>
 
             <div className="ob-actions">
+                <button type="button" className="ob-btn-secondary" onClick={onBack}>
+                    ← Back
+                </button>
                 <button type="submit" className="ob-btn-primary">
                     Continue <span aria-hidden>→</span>
                 </button>

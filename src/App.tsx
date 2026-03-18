@@ -126,7 +126,7 @@ function AppShell({
               isDoctor ? <PatientHistory /> : <Navigate to="/" replace />
             }
           />
-          <Route path="/reports" element={<Reports />} />
+          <Route path="/reports" element={<Reports session={session} />} />
           <Route path="/settings" element={<Settings session={session} />} />
           <Route path="/profile" element={<Profile session={session} />} />
           <Route path="*" element={<Navigate to="/" replace />} />

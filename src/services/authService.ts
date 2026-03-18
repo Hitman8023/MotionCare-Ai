@@ -5,7 +5,8 @@
  *  patients/patient_1, patient_2, … – patient profiles
  *  _counters/doctor                – { count: N }
  *  _counters/patient               – { count: N }
- *  user_index/{firebaseUid}        – { uid, docId, role, displayName }
+ *  _counters/user_index            – { count: N }
+ *  user_index/{user_index_N}       – { uid, docId, role, displayName }
  *                                     UID -> role doc mapping for sign-in
  * ─────────────────────────────────────────────────────────
  */
@@ -15,7 +16,16 @@ import {
     signInWithEmailAndPassword,
     signOut as firebaseSignOut,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, runTransaction } from 'firebase/firestore';
+import {
+    collection,
+    doc,
+    getDoc,
+    getDocs,
+    query,
+    setDoc,
+    where,
+    runTransaction,
+} from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { clearActiveUid, setActiveUid } from './realtimeDbService';
 import type { UserRole, SessionUser } from '../types/auth';
@@ -52,6 +62,34 @@ async function allocateDocId(role: UserRole): Promise<string> {
     });
 
     return `${prefix}_${next}`;
+}
+
+/** Atomically allocates user index IDs like "user_index_12". */
+async function allocateUserIndexDocId(): Promise<string> {
+    const counterRef = doc(db, '_counters', 'user_index');
+
+    const next = await runTransaction(db, async (tx) => {
+        const snap = await tx.get(counterRef);
+        const count = snap.exists() ? (snap.data().count as number) + 1 : 1;
+        tx.set(counterRef, { count });
+        return count;
+    });
+
+    return `user_index_${next}`;
+}
+
+async function getUserIndexByUid(uid: string): Promise<{ docId: string; role: UserRole; displayName: string } | null> {
+    // Backward compatibility: first check the legacy uid-keyed document.
+    const legacySnap = await getDoc(doc(db, 'user_index', uid));
+    if (legacySnap.exists()) {
+        return legacySnap.data() as { docId: string; role: UserRole; displayName: string };
+    }
+
+    const q = query(collection(db, 'user_index'), where('uid', '==', uid));
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+
+    return snap.docs[0].data() as { docId: string; role: UserRole; displayName: string };
 }
 
 function mapFirebaseError(code: string): string {
@@ -100,9 +138,9 @@ function getRoleMismatchMessage(expectedRole: UserRole): string {
 }
 
 async function getPatientNeedsOnboarding(patientUid: string): Promise<boolean> {
-    const indexSnap = await getDoc(doc(db, 'user_index', patientUid));
-    if (!indexSnap.exists()) return true;
-    const { docId } = indexSnap.data() as { docId: string };
+    const indexData = await getUserIndexByUid(patientUid);
+    if (!indexData) return true;
+    const { docId } = indexData;
     const profileSnap = await getDoc(doc(db, 'patients', docId));
     return !(profileSnap.exists() && profileSnap.data()?.onboardedAt);
 }
@@ -110,13 +148,9 @@ async function getPatientNeedsOnboarding(patientUid: string): Promise<boolean> {
 async function getSessionProfileByUid(
     uid: string,
 ): Promise<{ role: UserRole; displayName: string; profileDocId: string } | null> {
-    const indexSnap = await getDoc(doc(db, 'user_index', uid));
-    if (!indexSnap.exists()) return null;
-    const indexData = indexSnap.data() as {
-        role: UserRole;
-        displayName: string;
-        docId: string;
-    };
+    const indexData = await getUserIndexByUid(uid);
+    if (!indexData) return null;
+
     return {
         role: indexData.role,
         displayName: indexData.displayName,
@@ -151,6 +185,7 @@ export async function registerUser(
     const uid = cred.user.uid;
     const collectionName = role === 'doctor' ? 'doctors' : 'patients';
     const docId = await allocateDocId(role);
+    const userIndexDocId = await allocateUserIndexDocId();
 
     const profile = {
         uid,
@@ -161,11 +196,11 @@ export async function registerUser(
     };
 
     // Keep all role data in a single role profile document and store a minimal
-    // uid-keyed index only for auth lookup to that document.
+    // UID-searchable index only for auth lookup to that document.
     try {
         await Promise.all([
             setDoc(doc(db, collectionName, docId), profile),
-            setDoc(doc(db, 'user_index', uid), { uid, docId, role, displayName }),
+            setDoc(doc(db, 'user_index', userIndexDocId), { uid, docId, role, displayName }),
         ]);
     } catch (err: unknown) {
         const code = getErrorCode(err);
@@ -189,7 +224,7 @@ export async function registerUser(
 
 /**
  * Signs in with Firebase Auth and resolves the user's role + display name.
- * user_index/{uid} maps each user to their role document ID.
+ * user_index/{user_index_N} stores uid -> role document mappings.
  * Demo accounts are auto-seeded on first use.
  */
 export async function signInUser(
