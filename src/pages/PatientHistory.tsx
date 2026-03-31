@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { collection, onSnapshot } from "firebase/firestore";
 import { subscribeToAllPatientsLiveData } from "../services/realtimeDbService";
 import {
@@ -40,6 +40,7 @@ type TimelineEvent = {
 
 export default function PatientHistory() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [patients, setPatients] = useState<PatientProfile[]>([]);
   const [liveData, setLiveData] = useState<LiveDataMap>({});
   const [timelineByUid, setTimelineByUid] = useState<
@@ -190,10 +191,21 @@ export default function PatientHistory() {
             {filteredPatients.map((p, i) => (
               <div
                 key={i}
+                onClick={() => navigate(`/doctor/${p.uid}`)}
                 className="patient-row"
                 style={{
                   background: i === 0 ? "rgba(34,211,238,.05)" : "transparent",
                   border: `1px solid ${i === 0 ? "rgba(34,211,238,.12)" : "var(--border-light)"}`,
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(34,211,238,.1)";
+                  e.currentTarget.style.borderColor = "rgba(34,211,238,.2)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = i === 0 ? "rgba(34,211,238,.05)" : "transparent";
+                  e.currentTarget.style.borderColor = i === 0 ? "rgba(34,211,238,.12)" : "var(--border-light)";
                 }}
               >
                 <div

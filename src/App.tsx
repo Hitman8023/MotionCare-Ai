@@ -25,6 +25,8 @@ import Login from "./pages/Login";
 import DoctorDashboard from "./pages/DoctorDashboard";
 import Profile from "./pages/Profile";
 import Onboarding from "./pages/Onboarding";
+import ChatPage from "./pages/ChatPage";
+import PatientDetailPage from "./pages/PatientDetailPage";
 import type { SessionUser, UserRole } from "./types/auth";
 
 function AppShell({
@@ -75,6 +77,7 @@ function AppShell({
   return (
     <div className={`app-shell${sidebarOpen ? " sidebar-open" : ""}`}>
       <TopNav
+        uid={session.uid}
         isSidebarOpen={sidebarOpen}
         onMenuToggle={() => setSidebarOpen((open) => !open)}
         role={session.role}
@@ -121,9 +124,31 @@ function AppShell({
           <Route path="/movement" element={<MovementAnalysis />} />
           <Route path="/insights" element={<AIInsights />} />
           <Route
+            path="/chat"
+            element={
+              <ChatPage
+                currentUser={{
+                  uid: session.uid,
+                  role: session.role,
+                  profileDocId: session.profileDocId,
+                }}
+              />
+            }
+          />
+          <Route
             path="/patients"
             element={
               isDoctor ? <PatientHistory /> : <Navigate to="/" replace />
+            }
+          />
+          <Route
+            path="/doctor/:patientId"
+            element={
+              isDoctor ? (
+                <PatientDetailPage doctorId={session.uid} />
+              ) : (
+                <Navigate to="/" replace />
+              )
             }
           />
           <Route path="/reports" element={<Reports session={session} />} />

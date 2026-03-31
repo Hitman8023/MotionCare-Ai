@@ -73,6 +73,7 @@ export default function TopNav({
   }, [searchOpen]);
 
   useEffect(() => {
+    if (!uid) return;
     return subscribeToNotifications(uid, setNotifications);
   }, [uid]);
 

@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getDatabase } from 'firebase/database';
 import { getAnalytics, isSupported, type Analytics } from 'firebase/analytics';
@@ -18,6 +18,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
+
+// Enable local persistence so user stays logged in after page refresh
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+    console.warn('🔐 Failed to enable auth persistence:', err);
+});
+
 export const db = getFirestore(app);
 export const realtimeDb = getDatabase(app);
 

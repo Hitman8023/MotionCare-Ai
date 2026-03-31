@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { auth } from '../firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import { subscribeToAllPatientsLiveData } from '../services/realtimeDbService';
 import { db } from '../firebase';
 import type { LiveDataMap } from '../types/sensor';
@@ -53,11 +55,47 @@ export default function DoctorLiveBoard() {
     const [liveData, setLiveData] = useState<LiveDataMap>({});
     const [patients, setPatients] = useState<PatientProfile[]>([]);
     const [error, setError] = useState('');
+    const [authUser, setAuthUser] = useState<any>(null);
+    const [authLoading, setAuthLoading] = useState(true);
 
+    // First: Wait for auth state to be ready
     useEffect(() => {
+        console.log('🔐 Setting up auth state listener...');
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            console.log('🔐 Auth state changed, user:', user?.uid);
+            setAuthUser(user);
+            setAuthLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    // Second: Load patients once auth is ready
+    useEffect(() => {
+        if (authLoading) {
+            console.log('⏳ Still waiting for auth state...');
+            return;
+        }
+
         const loadPatients = async () => {
             try {
-                const snapshot = await getDocs(collection(db, 'patients'));
+                if (!authUser) {
+                    console.log('❌ No authenticated user found');
+                    setError('User not authenticated');
+                    return;
+                }
+
+                console.log('🔍 Loading patients assigned to doctor:', authUser.uid);
+
+                // Query only patients assigned to this doctor
+                const q = query(
+                    collection(db, 'patients'),
+                    where('assignedDoctorId', '==', authUser.uid)
+                );
+                const snapshot = await getDocs(q);
+
+                console.log('✅ Found', snapshot.size, 'patients assigned to this doctor');
+
                 const nextPatients: PatientProfile[] = snapshot.docs
                     .map((docItem) => docItem.data() as { uid?: string; displayName?: string })
                     .filter((item) => Boolean(item.uid))
@@ -66,13 +104,16 @@ export default function DoctorLiveBoard() {
                         displayName: item.displayName || 'Unnamed Patient',
                     }));
                 setPatients(nextPatients);
-            } catch {
-                setError('Failed to load patient list from Firestore.');
+                setError('');
+            } catch (err) {
+                console.error('❌ Error loading patients:', err);
+                const errorMsg = err instanceof Error ? err.message : 'Failed to load patient list from Firestore';
+                setError(errorMsg);
             }
         };
 
         loadPatients();
-    }, []);
+    }, [authLoading, authUser]);
 
     useEffect(() => {
         const unsubscribe = subscribeToAllPatientsLiveData(
@@ -129,7 +170,15 @@ export default function DoctorLiveBoard() {
                 </div>
 
                 {!patients.length ? (
-                    <div className="text-muted">No patients found in Firestore `patients` collection.</div>
+                    <div className="text-muted">
+                        {authLoading ? (
+                            <div>🔐 Loading authentication...</div>
+                        ) : error ? (
+                            <div style={{ color: 'var(--red)', marginBottom: '8px' }}>❌ {error}</div>
+                        ) : (
+                            <div>No patients assigned to you yet. When patients select you as their recovery doctor, they will appear here.</div>
+                        )}
+                    </div>
                 ) : (
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                         {patients.map((patient) => (

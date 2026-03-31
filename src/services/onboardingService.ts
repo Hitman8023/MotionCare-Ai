@@ -1,5 +1,6 @@
 import { doc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
+import { createNotification } from './notificationService';
 import type { OnboardingFormData } from '../types/onboarding';
 
 export type DoctorOption = {
@@ -58,6 +59,20 @@ export async function savePatientOnboarding(
         },
         { merge: true },
     );
+
+    // 📢 Send notification to doctor
+    if (data.doctor.doctorId) {
+        try {
+            const patientName = data.basicInfo.name || 'New Patient';
+            await createNotification(
+                data.doctor.doctorId,
+                `New patient assigned: ${patientName} has selected you as their recovery doctor.`,
+                'report'
+            );
+        } catch (error) {
+            console.error('Error sending notification to doctor:', error);
+        }
+    }
 }
 
 /** Fetch all doctors */
