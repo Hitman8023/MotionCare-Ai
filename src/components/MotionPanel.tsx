@@ -73,6 +73,8 @@ const HAND_RENDER = {
     frameIntervalMs: 14,
 } as const;
 
+const SHOULDER_TARGET_ANGLE = 12;
+
 const EXERCISE_META: Record<ExerciseType, { label: string; cue: string; targetAngle: number }> = {
     wrist_flexion: {
         label: 'Wrist Flexion',
@@ -84,10 +86,10 @@ const EXERCISE_META: Record<ExerciseType, { label: string; cue: string; targetAn
         cue: 'Bend wrist upward',
         targetAngle: 40,
     },
-    wrist_rotation: {
-        label: 'Wrist Rotation',
-        cue: 'Rotate wrist in a controlled motion',
-        targetAngle: 60,
+    front_shoulder_raise: {
+        label: 'Front Shoulder Raise',
+        cue: 'Raise arm forward to target, then return to neutral',
+        targetAngle: SHOULDER_TARGET_ANGLE,
     },
     radial_deviation: {
         label: 'Radial Deviation',
@@ -131,7 +133,7 @@ type DirectionLabel =
 const EXERCISE_DIRECTION: Record<ExerciseType, DirectionLabel> = {
     wrist_flexion: 'DOWN',
     wrist_extension: 'UP',
-    wrist_rotation: 'CLOCKWISE',
+    front_shoulder_raise: 'UP',
     radial_deviation: 'LEFT',
     ulnar_deviation: 'RIGHT',
 };
@@ -139,7 +141,7 @@ const EXERCISE_DIRECTION: Record<ExerciseType, DirectionLabel> = {
 const EXERCISE_TARGET_TOLERANCE: Record<ExerciseType, number> = {
     wrist_flexion: 5,
     wrist_extension: 5,
-    wrist_rotation: 8,
+    front_shoulder_raise: 4,
     radial_deviation: 2,
     ulnar_deviation: 2,
 };
@@ -147,6 +149,19 @@ const EXERCISE_TARGET_TOLERANCE: Record<ExerciseType, number> = {
 const REP_NEUTRAL_MIN = -2;
 const REP_NEUTRAL_MAX = 2;
 const DAILY_REP_STORAGE_KEY_PREFIX = 'motioncare:daily-reps:v1';
+
+function getExpectedDirection(exercise: ExerciseType): DirectionLabel {
+    return EXERCISE_DIRECTION[exercise];
+}
+
+function getExpectedDirectionHint(exercise: ExerciseType): string {
+    return getExpectedDirection(exercise).toLowerCase();
+}
+
+function isDirectionAcceptedForExercise(exercise: ExerciseType, direction: DirectionLabel, expected: DirectionLabel): boolean {
+    void exercise;
+    return direction === expected;
+}
 
 function updateAngle(gx: number, ax: number, ay: number, az: number, dt: number, prevAngle: number) {
     void ax;
@@ -160,11 +175,7 @@ function getDirectionForExercise(
     angleMetric: number,
     sample: MotionSensorSample,
 ): DirectionLabel {
-    if (exercise === 'wrist_rotation') {
-        if (sample.gz > 10) return 'CLOCKWISE';
-        if (sample.gz < -10) return 'COUNTERCLOCKWISE';
-        return 'STILL';
-    }
+    void sample;
 
     if (exercise === 'radial_deviation' || exercise === 'ulnar_deviation') {
         if (angleMetric > 3) return 'RIGHT';
@@ -361,6 +372,14 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
     const lastAngleLogAtRef = useRef(0);
     const lastRenderAtRef = useRef(0);
     const motLevelRef = useRef(24);
+    const latestRawDisplayAngleRef = useRef(0);
+    const angleOffsetByExerciseRef = useRef<Record<ExerciseType, number>>({
+        wrist_flexion: 0,
+        wrist_extension: 0,
+        front_shoulder_raise: 0,
+        radial_deviation: 0,
+        ulnar_deviation: 0,
+    });
     const exerciseMenuRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
@@ -620,24 +639,37 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                 });
                 const selectedTargetAngle = EXERCISE_META[selectedExercise].targetAngle;
 
-                const displayAngle =
-                    selectedExercise === 'wrist_rotation'
+                const rawDisplayAngle =
+                    selectedExercise === 'front_shoulder_raise'
                         ? nextResult.current_angle
                         : selectedExercise === 'radial_deviation' || selectedExercise === 'ulnar_deviation'
                             ? stabilizedDeviationAngle
                             : stabilizedFlexAngle;
+                latestRawDisplayAngleRef.current = rawDisplayAngle;
+                const displayAngle = rawDisplayAngle - angleOffsetByExerciseRef.current[selectedExercise];
                 const roundedDisplayAngle = Math.round(displayAngle);
                 setAngle(roundedDisplayAngle);
 
+                let repIncremented = false;
                 const targetTolerance = EXERCISE_TARGET_TOLERANCE[selectedExercise];
                 const isTargetReached = isAtOrBeyondTarget(displayAngle, selectedTargetAngle, targetTolerance);
                 const inRepNeutral = isInRepNeutralZone(displayAngle);
+
+                const expectedDirection = getExpectedDirection(selectedExercise);
+                const directionMetric = displayAngle;
+
+                const userDirection = getDirectionForExercise(selectedExercise, directionMetric, current);
+                setDirection(userDirection);
+
+                let isDirectionCorrect = isDirectionAcceptedForExercise(selectedExercise, userDirection, expectedDirection);
+                let movementQuality: ExerciseDetectionOutput['movement_quality'] =
+                    isTargetReached && isDirectionCorrect ? 'correct' : 'incorrect';
+                let expectedDirectionHint = getExpectedDirectionHint(selectedExercise);
 
                 if (inRepNeutral) {
                     repArmedRef.current = true;
                 }
 
-                let repIncremented = false;
                 if (repArmedRef.current && isTargetReached) {
                     repCountRef.current += 1;
                     setRepCount(repCountRef.current);
@@ -646,20 +678,17 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                     repIncremented = true;
                 }
 
-                const expectedDirection = EXERCISE_DIRECTION[selectedExercise];
-                const directionMetric =
-                    selectedExercise === 'wrist_rotation'
-                        ? nextResult.current_angle
-                        : selectedExercise === 'radial_deviation' || selectedExercise === 'ulnar_deviation'
-                            ? stabilizedDeviationAngle
-                            : stabilizedFlexAngle;
-
-                const userDirection = getDirectionForExercise(selectedExercise, directionMetric, current);
-                setDirection(userDirection);
-
-                const isDirectionCorrect = userDirection === expectedDirection;
-                const movementQuality: ExerciseDetectionOutput['movement_quality'] =
-                    isTargetReached ? 'correct' : 'incorrect';
+                if (repIncremented) {
+                    setGuidance(`Rep ${repCountRef.current} counted at target ${selectedTargetAngle}°. Return to -2..2 to arm next rep.`);
+                } else if (isTargetReached) {
+                    setGuidance(`Target matched at ${selectedTargetAngle}°. Move back to -2..2 to count the next rep.`);
+                } else if (userDirection === 'STILL') {
+                    setGuidance(`Move ${expectedDirectionHint} for ${selectedExerciseMeta.label}.`);
+                } else if (isDirectionCorrect) {
+                    setGuidance(`Correct direction (${userDirection}). Keep moving to reach ${selectedTargetAngle}°.`);
+                } else {
+                    setGuidance(`Incorrect motion (${userDirection}). Move ${expectedDirectionHint} instead.`);
+                }
 
                 setAnalysis({
                     ...nextResult,
@@ -668,18 +697,6 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                     repetitions: repCountRef.current,
                     movement_quality: movementQuality,
                 });
-
-                if (repIncremented) {
-                    setGuidance(`Rep ${repCountRef.current} counted at target ${selectedTargetAngle}°. Return to -2..2 to arm next rep.`);
-                } else if (isTargetReached) {
-                    setGuidance(`Target matched at ${selectedTargetAngle}°. Move back to -2..2 to count the next rep.`);
-                } else if (userDirection === 'STILL') {
-                    setGuidance(`Move ${expectedDirection.toLowerCase()} for ${selectedExerciseMeta.label}.`);
-                } else if (isDirectionCorrect) {
-                    setGuidance(`Correct direction (${userDirection}). Keep moving to reach ${selectedTargetAngle}°.`);
-                } else {
-                    setGuidance(`Incorrect motion (${userDirection}). Move ${expectedDirection.toLowerCase()} instead.`);
-                }
             }
         }, HAND_RENDER.frameIntervalMs);
 
@@ -709,7 +726,17 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
     const fmtSigned = (value: number, digits: number) => value.toFixed(digits);
     const handTransform = `translate(${renderX}px, ${renderY}px) rotate(${renderTilt}deg) scaleY(${renderScaleY})`;
     const selectedExerciseMeta = EXERCISE_META[selectedExercise];
-    const expectedDirection = EXERCISE_DIRECTION[selectedExercise];
+    const handleResetAngle = () => {
+        angleOffsetByExerciseRef.current[selectedExercise] = latestRawDisplayAngleRef.current;
+        repArmedRef.current = false;
+        setAngle(0);
+        setAnalysis((prev) => ({ ...prev, current_angle: 0 }));
+        setGuidance(`${selectedExerciseMeta.label} angle reset. Current position is now 0°.`);
+    };
+    const expectedDirection = getExpectedDirection(selectedExercise);
+    const expectedDirectionText = expectedDirection;
+    const activeTargetAngle = selectedExerciseMeta.targetAngle;
+    const selectedTargetText = `${fmtSigned(selectedExerciseMeta.targetAngle, 0)}°`;
     const targetTolerance = EXERCISE_TARGET_TOLERANCE[selectedExercise];
     const isTargetReached = isAtOrBeyondTarget(analysis.current_angle, selectedExerciseMeta.targetAngle, targetTolerance);
     const isNeutralMotion = direction === 'STILL' && !isTargetReached;
@@ -719,7 +746,7 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
             ? 'correct'
             : 'incorrect';
     const isDirectionCorrect = qualityMode === 'correct';
-    const angleDeviation = analysis.current_angle - selectedExerciseMeta.targetAngle;
+    const angleDeviation = analysis.current_angle - activeTargetAngle;
     const qualityColor =
         qualityMode === 'neutral'
             ? 'var(--blue)'
@@ -799,7 +826,8 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                             </div>
                         )}
                     </div>
-                    <span className="exercise-target-chip">Target: {fmtSigned(selectedExerciseMeta.targetAngle, 0)}°</span>
+                    <span className="exercise-target-chip">Target: {selectedTargetText}</span>
+                    <button type="button" className="exercise-reset-btn" onClick={handleResetAngle}>Reset Angle</button>
                 </div>
 
                 <div className="motion-card-grid">
@@ -841,7 +869,7 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
 
                 <div className="sensor-runtime-meta">
                     <span className={`runtime-pill ${sensorMode === 'LIVE SENSOR' ? 'runtime-pill-live' : 'runtime-pill-sim'}`}>{sensorMode}</span>
-                    <span className="runtime-pill runtime-pill-direction">Correct Direction: {expectedDirection}</span>
+                    <span className="runtime-pill runtime-pill-direction">Correct Direction: {expectedDirectionText}</span>
                     <span className="runtime-pill runtime-pill-direction">Your Direction: {direction}</span>
                     <span className="runtime-pill runtime-pill-exercise">{selectedExerciseMeta.label}</span>
                 </div>
@@ -883,7 +911,7 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                         <div className="quality-icon" style={{ background: qualityMode === 'neutral' ? 'rgba(96,165,250,.12)' : isDirectionCorrect ? 'rgba(52,211,153,.12)' : 'rgba(251,191,36,.12)' }}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={qualityMode === 'neutral' ? '#60a5fa' : isDirectionCorrect ? '#34d399' : '#fbbf24'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                         </div>
-                        <div><div className="quality-label" style={{ color: qualityColor }}>{qualityLabel}</div><div className="quality-sub">Correct: {expectedDirection} · Your: {direction}</div></div>
+                        <div><div className="quality-label" style={{ color: qualityColor }}>{qualityLabel}</div><div className="quality-sub">Correct: {expectedDirectionText} · Your: {direction}</div></div>
                         <div className="quality-val" style={{ color: qualityColor }}>{qualityMode === 'neutral' ? '•' : isDirectionCorrect ? '✓' : '!'}</div>
                     </div>
                     <div className="quality-row">
@@ -903,11 +931,11 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                     <div className="ai-recommendation-panel">
                         <div className="ai-recommendation-title">AI Recommendation</div>
                         <div className="ai-recommendation-copy">
-                            {qualityMode === 'neutral'
-                                ? `Neutral position detected. Move ${expectedDirection.toLowerCase()} to begin a valid repetition.`
-                                : isDirectionCorrect
-                                ? `Direction is correct (${direction}). Keep controlled return to neutral for repetition counting.`
-                                : `Move ${expectedDirection.toLowerCase()} for ${selectedExerciseMeta.label}. Your current direction is ${direction}.`}
+                                {qualityMode === 'neutral'
+                                    ? `Neutral position detected. Move ${getExpectedDirectionHint(selectedExercise)} to begin a valid repetition.`
+                                    : isDirectionCorrect
+                                        ? `Direction is correct (${direction}). Keep controlled return to neutral for repetition counting.`
+                                        : `Move ${getExpectedDirectionHint(selectedExercise)} for ${selectedExerciseMeta.label}. Your current direction is ${direction}.`}
                         </div>
                     </div>
                 </div>
@@ -928,11 +956,11 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                     </div>
                     <div className="insight-card warn">
                         <div className="insight-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg></div>
-                        <div><div className="insight-text">Current angle {fmtSigned(analysis.current_angle, 0)}° vs target {fmtSigned(selectedExerciseMeta.targetAngle, 0)}° for {selectedExerciseMeta.label}.</div><div className="insight-time">Live</div></div>
+                        <div><div className="insight-text">Current angle {fmtSigned(analysis.current_angle, 0)}° vs target {selectedTargetText} for {selectedExerciseMeta.label}.</div><div className="insight-time">Live</div></div>
                     </div>
                     <div className="insight-card success">
                         <div className="insight-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg></div>
-                        <div><div className="insight-text">Direction check: expected {expectedDirection}, current {direction}. Correct repetitions counted: {repCount}.</div><div className="insight-time">Live</div></div>
+                        <div><div className="insight-text">Direction check: expected {expectedDirectionText}, current {direction}. Correct repetitions counted: {repCount}.</div><div className="insight-time">Live</div></div>
                     </div>
                     <div className="insight-card info">
                         <div className="insight-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg></div>
@@ -1019,9 +1047,14 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                                 <div className="hand-sim-overlay-title">Live Hand Simulation</div>
                                 <div className="hand-sim-overlay-sub">Mirror of real-time sensor movement for left, right, up, and down tracking</div>
                             </div>
-                            <button type="button" className="hand-sim-close" onClick={() => setIsFullscreenSim(false)}>
-                                Close
-                            </button>
+                            <div className="hand-sim-overlay-actions">
+                                <button type="button" className="exercise-reset-btn hand-sim-reset" onClick={handleResetAngle}>
+                                    Reset Angle
+                                </button>
+                                <button type="button" className="hand-sim-close" onClick={() => setIsFullscreenSim(false)}>
+                                    Close
+                                </button>
+                            </div>
                         </div>
 
                         <div className="hand-sim-stage-wrap">
@@ -1038,7 +1071,7 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                                 <div className="hand-sim-metrics">X: {fmtSigned(renderX, 0)}px</div>
                                 <div className="hand-sim-metrics">Y: {fmtSigned(renderY, 0)}px</div>
                                 <div className="hand-sim-metrics">Angle: {fmtSigned(angle, 0)}°</div>
-                                <div className="hand-sim-metrics">Target: {fmtSigned(selectedExerciseMeta.targetAngle, 0)}°</div>
+                                <div className="hand-sim-metrics">Target: {selectedTargetText}</div>
                                 <div className="hand-sim-metrics">Direction: {direction}</div>
                                 <div className="hand-sim-metrics">Quality: {analysis.movement_quality}</div>
                             </div>

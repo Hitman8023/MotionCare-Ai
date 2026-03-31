@@ -34,7 +34,7 @@ export default function Sidebar({ role, open, onNavigate }: SidebarProps) {
         { to: '/insights', label: 'My AI Insights', icon: <><circle cx="12" cy="12" r="3" /><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" /></>, badge: null },
 
         // ✅ ADDED CHAT HERE
-        { to: '/chat', label: 'Chat', icon: <><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" /></>, badge: null },
+        { to: '/chat', label: 'Chat with Doctor', icon: <><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" /></>, badge: null },
     ];
 
     // 🔹 PATIENT SECONDARY
@@ -44,6 +44,14 @@ export default function Sidebar({ role, open, onNavigate }: SidebarProps) {
 
     const navItems = role === 'doctor' ? doctorMainItems : patientMainItems;
     const secondaryItems = role === 'doctor' ? doctorPatientItems : patientSupportItems;
+    const assistantItems = [
+        {
+            to: '/assistant',
+            label: role === 'doctor' ? 'Recovery Assistant' : 'My Recovery Assistant',
+            icon: <><path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z" /><path d="M8 10h8M8 14h5" /></>,
+            badge: 'AI',
+        },
+    ];
 
     return (
         <aside className={`sidebar${open ? ' sidebar-open' : ''}`}>
@@ -82,6 +90,25 @@ export default function Sidebar({ role, open, onNavigate }: SidebarProps) {
                         {item.icon}
                     </svg>
                     {item.label}
+                </NavLink>
+            ))}
+
+            <div className="sidebar-divider"></div>
+
+            <div className="sidebar-section-label">AI Assistant</div>
+
+            {assistantItems.map((item) => (
+                <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={onNavigate}
+                    className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
+                >
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        {item.icon}
+                    </svg>
+                    {item.label}
+                    {item.badge && <span className="nav-badge">{item.badge}</span>}
                 </NavLink>
             ))}
 
