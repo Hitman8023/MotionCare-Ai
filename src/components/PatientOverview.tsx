@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../firebase";
-import { subscribeToPatientLiveData } from "../services/realtimeDbService";
+import {
+  subscribeToPatientLiveData,
+  subscribeToPatientSessionHistory,
+} from "../services/realtimeDbService";
+import type { SessionSummary } from "../types/sensor";
 import {
   computeAccuracy,
   computeFlexRange,
@@ -36,6 +40,9 @@ export default function PatientOverview({
   const [flexRange, setFlexRange] = useState(0);
   const [alertsToday, setAlertsToday] = useState(0);
   const [lastSampleAt, setLastSampleAt] = useState<string>("");
+  const [sessionHistory, setSessionHistory] = useState<
+    Record<string, SessionSummary>
+  >({});
 
   const sessionStartRef = useRef<number | null>(null);
   const alertCountRef = useRef(0);
@@ -86,6 +93,16 @@ export default function PatientOverview({
     return unsubscribe;
   }, [patientUid]);
 
+  useEffect(() => {
+    if (!patientUid) return;
+    const unsubscribe = subscribeToPatientSessionHistory(
+      patientUid,
+      (next) => setSessionHistory(next),
+      (error) => console.error("Session history error", error),
+    );
+    return unsubscribe;
+  }, [patientUid]);
+
   const derivedStage = useMemo(() => {
     if (score >= 85) return "Week 6 — Strengthening";
     if (score >= 70) return "Week 4 — Active Rehab";
@@ -96,8 +113,23 @@ export default function PatientOverview({
   const elapsedMinutes = sessionStartRef.current
     ? Math.floor((Date.now() - sessionStartRef.current) / 60000)
     : 0;
+  const historyStats = useMemo(() => {
+    const entries = Object.values(sessionHistory);
+    if (!entries.length) return null;
+    const latest = entries.reduce((acc, item) =>
+      acc.dateKey > item.dateKey ? acc : item,
+    );
+    const completedCount = entries.filter(
+      (entry) => entry.completionRatio > 0,
+    ).length;
+    const lastTimestamp =
+      latest.updatedAt || latest.startedAt || latest.dateKey;
+    return { completedCount, lastTimestamp };
+  }, [sessionHistory]);
   const sessionsDone =
-    profile.sessionsDone ?? Math.max(0, Math.floor(elapsedMinutes / 45));
+    profile.sessionsDone ??
+    historyStats?.completedCount ??
+    Math.max(0, Math.floor(elapsedMinutes / 45));
 
   const patientName = profile.displayName || displayName || "Patient";
   const patientInitials = patientName
@@ -108,7 +140,10 @@ export default function PatientOverview({
     .toUpperCase();
   const stageLabel = profile.stage || derivedStage;
   const lastSessionLabel =
-    profile.lastSession || formatTimestampLabel(lastSampleAt);
+    profile.lastSession ||
+    (historyStats?.lastTimestamp
+      ? formatTimestampLabel(historyStats.lastTimestamp)
+      : formatTimestampLabel(lastSampleAt));
 
   const dashOffset = (1 - score / 100) * 220;
 

@@ -276,7 +276,11 @@
 }
 
 [data-theme="light"] .exercise-select-trigger {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98));
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.98),
+    rgba(248, 250, 252, 0.98)
+  );
   color: #0f172a;
   border-color: rgba(148, 163, 184, 0.32);
 }
@@ -1062,7 +1066,6 @@ body::before {
   padding: 28px;
   min-height: calc(100vh - var(--nav-h));
   position: relative;
-  z-index: 1;
 }
 
 .page-header {
@@ -1705,14 +1708,20 @@ canvas {
   padding: 10px 12px;
   border-radius: 10px;
   border: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 0.85));
+  background: linear-gradient(
+    180deg,
+    rgba(15, 23, 42, 0.96),
+    rgba(15, 23, 42, 0.85)
+  );
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 700;
   font-family: var(--font);
   cursor: pointer;
   box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.08);
-  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease),
+  transition:
+    border-color 0.2s var(--ease),
+    box-shadow 0.2s var(--ease),
     transform 0.2s var(--ease);
 }
 
@@ -1759,7 +1768,9 @@ canvas {
   color: var(--text-primary);
   cursor: pointer;
   text-align: left;
-  transition: border-color 0.2s var(--ease), background-color 0.2s var(--ease),
+  transition:
+    border-color 0.2s var(--ease),
+    background-color 0.2s var(--ease),
     transform 0.2s var(--ease);
 }
 
@@ -2514,11 +2525,116 @@ canvas {
 }
 
 /* ─── HEATMAP ─── */
+.heatmap-root {
+  --heatmap-label-col: 110px;
+}
+.heatmap-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.heatmap-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.heatmap-toggle button {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  font-family: var(--font);
+}
+
+.heatmap-toggle button.active {
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--teal);
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.2);
+}
+
 .heatmap-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(14px, 1fr));
   gap: 5px;
-  margin-top: 8px;
+  width: 100%;
+}
+
+.heatmap-week-header {
+  display: grid;
+  grid-template-columns: var(--heatmap-label-col, 110px) 1fr;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 6px;
+  width: 100%;
+}
+
+.heatmap-week-spacer {
+  height: 1px;
+}
+
+.heatmap-weeks {
+  display: grid;
+  gap: 8px;
+}
+
+.heatmap-week {
+  display: grid;
+  grid-template-columns: var(--heatmap-label-col, 110px) 1fr;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+}
+
+.heatmap-week.compact {
+  grid-template-columns: 80px 1fr;
+}
+
+.heatmap-week-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.heatmap-months {
+  display: grid;
+  gap: 12px;
+}
+
+.heatmap-month {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-light);
+  background: var(--surface-3);
+}
+
+.heatmap-month-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.heatmap-month-weeks {
+  display: grid;
+  gap: 6px;
 }
 
 .heatmap-cell {
@@ -2526,6 +2642,7 @@ canvas {
   border-radius: 5px;
   cursor: pointer;
   transition: all 0.2s var(--spring);
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.35);
 }
 
 .heatmap-cell:hover {
@@ -2535,9 +2652,11 @@ canvas {
 
 .heatmap-label-row {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(14px, 1fr));
   gap: 5px;
-  margin-bottom: 4px;
+  width: 100%;
+  align-items: center;
+  justify-items: center;
 }
 
 .heatmap-day {
@@ -3536,8 +3655,11 @@ svg.sparkline {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-muted);
-  transition: border-color 0.3s var(--ease), background 0.3s var(--ease),
-    color 0.3s var(--ease), box-shadow 0.3s var(--ease);
+  transition:
+    border-color 0.3s var(--ease),
+    background 0.3s var(--ease),
+    color 0.3s var(--ease),
+    box-shadow 0.3s var(--ease);
   flex-shrink: 0;
 }
 .ob-progress-item.active .ob-progress-circle {
@@ -3585,8 +3707,14 @@ svg.sparkline {
   animation: ob-fade-up 0.32s var(--ease);
 }
 @keyframes ob-fade-up {
-  from { opacity: 0; transform: translateY(14px); }
-  to   { opacity: 1; transform: translateY(0);    }
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ── Step header ─────────────────────────────────────────────── */
@@ -3644,7 +3772,9 @@ svg.sparkline {
   padding: 10px 14px;
   font-size: 14px;
   font-family: var(--font);
-  transition: border-color 0.2s var(--ease), box-shadow 0.2s var(--ease);
+  transition:
+    border-color 0.2s var(--ease),
+    box-shadow 0.2s var(--ease);
   outline: none;
   resize: vertical;
   width: 100%;
@@ -3698,11 +3828,13 @@ svg.sparkline {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
-  transition: border-color 0.2s var(--ease), background 0.2s var(--ease),
+  transition:
+    border-color 0.2s var(--ease),
+    background 0.2s var(--ease),
     color 0.2s var(--ease);
   user-select: none;
 }
-.ob-radio input[type='radio'] {
+.ob-radio input[type="radio"] {
   display: none;
 }
 .ob-radio-mark {
@@ -3761,7 +3893,9 @@ svg.sparkline {
   border-radius: var(--radius-sm);
   cursor: pointer;
   background: var(--surface-2);
-  transition: border-color 0.2s var(--ease), background 0.2s var(--ease),
+  transition:
+    border-color 0.2s var(--ease),
+    background 0.2s var(--ease),
     box-shadow 0.2s var(--ease);
 }
 .ob-doctor-card:hover {
@@ -3773,7 +3907,7 @@ svg.sparkline {
   background: var(--teal-light);
   box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.08);
 }
-.ob-doctor-card input[type='radio'] {
+.ob-doctor-card input[type="radio"] {
   display: none;
 }
 .ob-doctor-avatar {
@@ -3840,7 +3974,9 @@ svg.sparkline {
   font-weight: 600;
   cursor: pointer;
   font-family: var(--font);
-  transition: opacity 0.2s var(--ease), transform 0.15s var(--ease);
+  transition:
+    opacity 0.2s var(--ease),
+    transform 0.15s var(--ease);
 }
 .ob-btn-suggest:hover:not(:disabled) {
   opacity: 0.85;
@@ -3886,7 +4022,9 @@ svg.sparkline {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: opacity 0.2s var(--ease), transform 0.15s var(--ease);
+  transition:
+    opacity 0.2s var(--ease),
+    transform 0.15s var(--ease);
   box-shadow: 0 4px 14px rgba(8, 145, 178, 0.35);
 }
 .ob-btn-primary:hover:not(:disabled) {
@@ -3908,7 +4046,9 @@ svg.sparkline {
   font-weight: 500;
   font-family: var(--font);
   cursor: pointer;
-  transition: border-color 0.2s var(--ease), color 0.2s var(--ease);
+  transition:
+    border-color 0.2s var(--ease),
+    color 0.2s var(--ease);
 }
 .ob-btn-secondary:hover:not(:disabled) {
   border-color: var(--border-glow);
@@ -3930,7 +4070,9 @@ svg.sparkline {
   animation: ob-spin 0.65s linear infinite;
 }
 @keyframes ob-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── Submit error banner ─────────────────────────────────────── */
@@ -3974,12 +4116,12 @@ svg.sparkline {
 }
 
 /* Light-theme overrides */
-[data-theme='light'] .ob-card {
+[data-theme="light"] .ob-card {
   background: rgba(255, 255, 255, 0.9);
 }
-[data-theme='light'] .ob-blob-1 {
+[data-theme="light"] .ob-blob-1 {
   opacity: 0.18;
 }
-[data-theme='light'] .ob-blob-2 {
+[data-theme="light"] .ob-blob-2 {
   opacity: 0.15;
 }
