@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { SessionUser, UserRole } from '../types/auth';
 import { signInUser, registerUser } from '../services/authService';
+import { sendWelcomeEmail } from '../services/emailService';
 
 type LoginProps = {
     onLogin: (user: SessionUser) => void;
@@ -85,7 +86,12 @@ export default function Login({ onLogin }: LoginProps) {
         setSignupLoading(true);
         try {
             const user = await registerUser(trimmedName, signupEmail, signupPassword, signupRole);
-            setSignupSuccess('Account created! Signing you in…');
+            try {
+                await sendWelcomeEmail(trimmedName, signupEmail);
+                setSignupSuccess('Account created! Welcome email sent. Signing you in…');
+            } catch {
+                setSignupSuccess('Account created! Signing you in… (welcome email could not be sent)');
+            }
             setTimeout(() => {
                 onLogin(user);
                 navigate(user.needsOnboarding ? '/onboarding' : '/', { replace: true });

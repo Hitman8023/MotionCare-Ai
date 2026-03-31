@@ -2,8 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { useTheme } from "../ThemeContext";
 import type { UserRole } from "../types/auth";
+import {
+  subscribeToNotifications,
+  type AppNotification,
+} from "../services/notificationService";
 
 type TopNavProps = {
+  uid: string;
   isSidebarOpen: boolean;
   onMenuToggle: () => void;
   role: UserRole;
@@ -14,6 +19,7 @@ type TopNavProps = {
 };
 
 export default function TopNav({
+  uid,
   isSidebarOpen,
   onMenuToggle,
   role,
@@ -26,8 +32,11 @@ export default function TopNav({
   const [dateStr, setDateStr] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const { theme, toggleTheme } = useTheme();
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const notificationPanelRef = useRef<HTMLDivElement | null>(null);
   const roleLabel = role === "doctor" ? "Doctor Portal" : "Patient Portal";
   const searchLabel = role === "doctor" ? "Search patients" : "Search reports";
   const initials = displayName
@@ -62,6 +71,45 @@ export default function TopNav({
       });
     }
   }, [searchOpen]);
+
+  useEffect(() => {
+    return subscribeToNotifications(uid, setNotifications);
+  }, [uid]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!notificationPanelRef.current?.contains(target)) {
+        setNotificationsOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [notificationsOpen]);
+
+  const unreadCount = notifications.filter((item) => !item.isRead).length;
+
+  const formatNotificationTimestamp = (createdAtMs: number) => {
+    if (!createdAtMs) return "just now";
+    const now = Date.now();
+    const diffMs = Math.max(0, now - createdAtMs);
+    const diffMinutes = Math.floor(diffMs / 60000);
+    if (diffMinutes < 1) return "just now";
+    if (diffMinutes < 60) return `${diffMinutes}m ago`;
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return new Date(createdAtMs).toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
 
   const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -191,21 +239,46 @@ export default function TopNav({
           )}
         </button>
 
-        <div className="nav-icon-btn">
-          <svg
-            width="17"
-            height="17"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        <div className="notification-wrap" ref={notificationPanelRef}>
+          <button
+            type="button"
+            className="nav-icon-btn"
+            aria-label="Open notifications"
+            onClick={() => setNotificationsOpen((current) => !current)}
           >
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-            <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-          </svg>
-          <div className="badge">3</div>
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+            {unreadCount > 0 ? <div className="badge">{Math.min(unreadCount, 9)}</div> : null}
+          </button>
+
+          {notificationsOpen ? (
+            <div className="notification-panel" role="dialog" aria-label="Notifications panel">
+              <div className="notification-panel-header">Notifications</div>
+              {notifications.length ? (
+                <div className="notification-list">
+                  {notifications.map((item) => (
+                    <div className="notification-item" key={item.id}>
+                      <div className="notification-message">{item.message}</div>
+                      <div className="notification-time">{formatNotificationTimestamp(item.createdAtMs)}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="notification-empty">No notifications yet.</div>
+              )}
+            </div>
+          ) : null}
         </div>
         <button
           type="button"

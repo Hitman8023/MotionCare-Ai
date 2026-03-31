@@ -742,6 +742,71 @@ body::before {
   background: rgba(34, 211, 238, 0.08);
 }
 
+.notification-wrap {
+  position: relative;
+}
+
+.notification-panel {
+  position: absolute;
+  top: 50px;
+  right: 0;
+  width: min(360px, calc(100vw - 24px));
+  max-height: 360px;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-md);
+  backdrop-filter: blur(12px);
+  z-index: 120;
+}
+
+.notification-panel-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.notification-list {
+  overflow-y: auto;
+}
+
+.notification-item {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-light);
+  display: grid;
+  gap: 4px;
+}
+
+.notification-item:last-child {
+  border-bottom: none;
+}
+
+.notification-message {
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.notification-time {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.notification-empty {
+  padding: 16px 14px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
 .badge {
   position: absolute;
   top: -5px;
@@ -3009,6 +3074,10 @@ svg.sparkline {
 
   .nav-icon-btn:nth-of-type(2) {
     display: none;
+  }
+
+  .notification-panel {
+    right: -48px;
   }
 
   .profile-btn,

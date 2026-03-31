@@ -21,6 +21,7 @@ import {
   uploadMedicalReport,
   validateMedicalReportFile,
 } from "../services/reportUploadService";
+import { createNotification } from "../services/notificationService";
 import type { SessionUser } from "../types/auth";
 import type { LiveDataMap } from "../types/sensor";
 
@@ -547,6 +548,23 @@ export default function Reports({ session }: { session: SessionUser }) {
       );
 
       await updateDoc(patientRef, { reports: nextReports });
+
+      const doctorLabel = session.displayName || "Doctor";
+      const patientLabel = report.patientName || "Patient";
+
+      if (report.patientUid) {
+        await createNotification(
+          report.patientUid,
+          `Report \"${report.title}\" was reviewed by ${doctorLabel}.`,
+          "report",
+        );
+      }
+
+      await createNotification(
+        session.uid,
+        `You reviewed \"${report.title}\" for ${patientLabel}.`,
+        "report",
+      );
 
       setUploadedReports((current) =>
         current.map((row) =>

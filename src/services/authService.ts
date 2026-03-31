@@ -144,7 +144,7 @@ async function getPatientNeedsOnboarding(patientUid: string): Promise<boolean> {
     return !(profileSnap.exists() && profileSnap.data()?.onboardedAt);
 }
 
-async function getSessionProfileByUid(
+export async function getSessionProfileByUid(
     uid: string,
 ): Promise<{ role: UserRole; displayName: string; profileDocId: string } | null> {
     const indexData = await getUserIndexByUid(uid);

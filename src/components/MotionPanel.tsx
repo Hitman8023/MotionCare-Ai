@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import SimulationViewer from './SimulationViewer.tsx';
 
 type SensorSample = {
     ax: number;
@@ -36,83 +37,6 @@ function makePath(data: number[], w: number, h: number, pad = 4) {
     return { d, area };
 }
 
-function ArmModel({ idPrefix }: { idPrefix: string }) {
-    return (
-        <>
-            <defs>
-                <linearGradient id={`${idPrefix}-skin`} x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="#7dd3fc" />
-                    <stop offset="52%" stopColor="#38bdf8" />
-                    <stop offset="100%" stopColor="#0891b2" />
-                </linearGradient>
-                <linearGradient id={`${idPrefix}-shade`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="rgba(14, 116, 144, 0.0)" />
-                    <stop offset="100%" stopColor="rgba(8, 145, 178, 0.45)" />
-                </linearGradient>
-                <linearGradient id={`${idPrefix}-forearm`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#67e8f9" />
-                    <stop offset="100%" stopColor="#0e7490" />
-                </linearGradient>
-            </defs>
-
-            {/* Forearm and elbow segment for full arm visualization */}
-            <path
-                d="M40 242 C34 232, 30 216, 30 198 C30 173, 38 150, 50 136 C62 122, 75 122, 88 136 C100 150, 108 173, 108 198 C108 216, 104 232, 98 242 Z"
-                fill={`url(#${idPrefix}-forearm)`}
-                opacity="0.96"
-            />
-            <ellipse cx="69" cy="248" rx="30" ry="14" fill="rgba(14,116,144,.72)" />
-            <ellipse cx="69" cy="248" rx="22" ry="9" fill="rgba(125,211,252,.26)" />
-
-            {/* Wrist joint */}
-            <ellipse cx="69" cy="170" rx="22" ry="10" fill="rgba(125,211,252,.34)" />
-
-            {/* Wrist + palm base */}
-            <path d="M34 164 C28 152, 29 133, 33 112 C36 94, 40 82, 48 73 C55 64, 64 60, 74 62 C85 64, 93 72, 97 84 C101 97, 101 116, 97 132 C93 148, 88 160, 80 166 Z" fill={`url(#${idPrefix}-skin)`} opacity="0.98" />
-
-            {/* Fingers */}
-            <rect x="44" y="18" width="14" height="62" rx="7" fill={`url(#${idPrefix}-skin)`} />
-            <rect x="60" y="10" width="14" height="68" rx="7" fill={`url(#${idPrefix}-skin)`} />
-            <rect x="76" y="14" width="13" height="62" rx="6.5" fill={`url(#${idPrefix}-skin)`} />
-            <rect x="90" y="28" width="11" height="48" rx="5.5" fill={`url(#${idPrefix}-skin)`} />
-
-            {/* Thumb */}
-            <path d="M25 86 C19 82, 12 86, 11 93 C10 99, 14 104, 21 106 L38 110 L41 97 Z" fill={`url(#${idPrefix}-skin)`} />
-
-            {/* Palm muscle shading */}
-            <ellipse cx="67" cy="105" rx="26" ry="24" fill={`url(#${idPrefix}-shade)`} />
-
-            {/* Knuckles */}
-            <circle cx="51" cy="79" r="2.6" fill="rgba(240,249,255,.58)" />
-            <circle cx="67" cy="76" r="2.6" fill="rgba(240,249,255,.58)" />
-            <circle cx="82" cy="78" r="2.5" fill="rgba(240,249,255,.58)" />
-            <circle cx="95" cy="83" r="2.2" fill="rgba(240,249,255,.52)" />
-
-            {/* Nail highlights */}
-            <rect x="47" y="20" width="8" height="8" rx="3" fill="rgba(240,249,255,.5)" />
-            <rect x="63" y="12" width="8" height="8" rx="3" fill="rgba(240,249,255,.5)" />
-            <rect x="79" y="16" width="7" height="7" rx="3" fill="rgba(240,249,255,.45)" />
-            <rect x="92" y="30" width="6" height="6" rx="3" fill="rgba(240,249,255,.45)" />
-
-            {/* Outline for depth */}
-            <path
-                d="M34 164 C28 152, 29 133, 33 112 C36 94, 40 82, 48 73 C55 64, 64 60, 74 62 C85 64, 93 72, 97 84 C101 97, 101 116, 97 132 C93 148, 88 160, 80 166 Z"
-                fill="none"
-                stroke="rgba(125,211,252,.55)"
-                strokeWidth="1.2"
-            />
-
-            {/* Forearm outline */}
-            <path
-                d="M40 242 C34 232, 30 216, 30 198 C30 173, 38 150, 50 136 C62 122, 75 122, 88 136 C100 150, 108 173, 108 198 C108 216, 104 232, 98 242"
-                fill="none"
-                stroke="rgba(125,211,252,.48)"
-                strokeWidth="1.3"
-            />
-        </>
-    );
-}
-
 export default function MotionPanel() {
     const [angle, setAngle] = useState(35);
     const [ax, setAx] = useState(0);
@@ -123,8 +47,6 @@ export default function MotionPanel() {
     const [gz, setGz] = useState(0);
     const [renderX, setRenderX] = useState(0);
     const [renderY, setRenderY] = useState(0);
-    const [renderTilt, setRenderTilt] = useState(0);
-    const [renderScaleY, setRenderScaleY] = useState(1);
     const [isFullscreenSim, setIsFullscreenSim] = useState(false);
     const [sensorMode, setSensorMode] = useState<'SIMULATED' | 'LIVE SENSOR'>('SIMULATED');
     const [guidance, setGuidance] = useState('Hold steady in the center target');
@@ -228,13 +150,9 @@ export default function MotionPanel() {
             const current = sampleRef.current;
             const targetX = clamp(current.ax * 100, -120, 120);
             const targetY = clamp(-current.ay * 100, -120, 120);
-            const targetTilt = clamp(current.gz * 1.8, -28, 28);
-            const targetScaleY = clamp(1 - Math.abs(current.gx) / 800, 0.88, 1.06);
 
             setRenderX((prev) => prev + (targetX - prev) * 0.3);
             setRenderY((prev) => prev + (targetY - prev) * 0.3);
-            setRenderTilt((prev) => prev + (targetTilt - prev) * 0.25);
-            setRenderScaleY((prev) => prev + (targetScaleY - prev) * 0.25);
 
             setAx(current.ax);
             setAy(current.ay);
@@ -283,7 +201,6 @@ export default function MotionPanel() {
 
     const motSpark = makePath(motBuf, 320, 48);
     const fmtSigned = (value: number, digits: number) => `${value > 0 ? '+' : ''}${value.toFixed(digits)}`;
-    const handTransform = `translate(${renderX}px, ${renderY}px) rotate(${renderTilt}deg) scaleY(${renderScaleY})`;
 
     return (
         <>
@@ -314,9 +231,13 @@ export default function MotionPanel() {
                         >
                             <div className="hand-3d-wrap" style={{ width: '160px', height: '160px' }}>
                                 <div className="hand-target-ring" aria-hidden="true"></div>
-                                <svg className="hand-svg" width="120" height="220" viewBox="0 0 140 270" style={{ transform: handTransform }}>
-                                    <ArmModel idPrefix="arm-card" />
-                                </svg>
+                                <Suspense fallback={null}>
+                                    <SimulationViewer
+                                        className="hand-svg"
+                                        style={{ width: '120px', height: '220px' }}
+                                        modelPath="/models/FpsArmsLow.glb"
+                                    />
+                                </Suspense>
                             </div>
                         </button>
                         <div style={{ marginTop: '12px', textAlign: 'center' }}>
@@ -452,9 +373,13 @@ export default function MotionPanel() {
                         <div className="hand-sim-stage-wrap">
                             <div className="hand-sim-stage">
                                 <div className="hand-stage-crosshair" aria-hidden="true"></div>
-                                <svg className="hand-sim-stage-svg" width="270" height="430" viewBox="0 0 140 270" style={{ transform: handTransform }}>
-                                    <ArmModel idPrefix="arm-fullscreen" />
-                                </svg>
+                                <Suspense fallback={null}>
+                                    <SimulationViewer
+                                        className="hand-sim-stage-svg"
+                                        style={{ width: '270px', height: '430px' }}
+                                        modelPath="/models/FpsArmsLow.glb"
+                                    />
+                                </Suspense>
                             </div>
 
                             <div className="hand-sim-sidepanel">
