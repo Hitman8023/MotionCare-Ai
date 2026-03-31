@@ -18,6 +18,7 @@ import Dashboard from "./pages/Dashboard";
 import LiveMonitoring from "./pages/LiveMonitoring";
 import MovementAnalysis from "./pages/MovementAnalysis";
 import AIInsights from "./pages/AIInsights";
+import RecoveryAssistant from "./pages/RecoveryAssistant";
 import PatientHistory from "./pages/PatientHistory";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
@@ -126,6 +127,7 @@ function AppShell({
           />
           <Route path="/movement" element={<MovementAnalysis />} />
           <Route path="/insights" element={<AIInsights />} />
+          <Route path="/assistant" element={<RecoveryAssistant />} />
           <Route
             path="/chat"
             element={

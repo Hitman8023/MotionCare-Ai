@@ -1,5 +1,30 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { auth } from '../firebase';
+import type { ExerciseType } from '../services/exerciseDetection';
+
+type TodayExerciseDistribution = {
+    todayTotal: number;
+    byExercise: Partial<Record<ExerciseType, number>>;
+};
+
+const DAILY_REP_STORAGE_KEY_PREFIX = 'motioncare:daily-reps:v1';
+
+const EXERCISE_ORDER: ExerciseType[] = [
+    'wrist_flexion',
+    'wrist_extension',
+    'front_shoulder_raise',
+    'radial_deviation',
+    'ulnar_deviation',
+];
+
+const EXERCISE_LABELS: Record<ExerciseType, string> = {
+    wrist_flexion: 'Wrist Flexion',
+    wrist_extension: 'Wrist Extension',
+    front_shoulder_raise: 'Front Shoulder Raise',
+    radial_deviation: 'Radial Deviation',
+    ulnar_deviation: 'Ulnar Deviation',
+};
 
 type JointMetric = {
     name: string;
@@ -33,6 +58,9 @@ function jointStatus(delta: number): 'Normal' | 'Limited' | 'Critical' {
 export default function MovementAnalysis() {
     const [angle, setAngle] = useState(38);
     const [rom, setRom] = useState(42);
+    const [exerciseDistribution, setExerciseDistribution] = useState<TodayExerciseDistribution>(() =>
+        readTodayExerciseDistribution(auth.currentUser?.uid ?? 'local'),
+    );
     const handTRef = useRef(0);
 
     useEffect(() => {
@@ -45,12 +73,23 @@ export default function MovementAnalysis() {
         return () => clearInterval(interval);
     }, []);
 
+    useEffect(() => {
+        const sync = () => {
+            setExerciseDistribution(readTodayExerciseDistribution(auth.currentUser?.uid ?? 'local'));
+        };
+
+        sync();
+        const interval = setInterval(sync, 5000);
+        return () => clearInterval(interval);
+    }, []);
+
     const joints: JointMetric[] = [
         { name: 'Wrist Flexion', current: angle, target: -40, unit: 'deg' },
         { name: 'Wrist Extension', current: 28, target: 40, unit: 'deg' },
         { name: 'Wrist Rotation', current: 65, target: 60, unit: 'deg' },
         { name: 'Radial Deviation', current: 15, target: 4, unit: 'deg' },
         { name: 'Ulnar Deviation', current: -22, target: -4, unit: 'deg' },
+    ];
     ];
 
     const sessions = [
@@ -162,6 +201,50 @@ export default function MovementAnalysis() {
                             );
                         })}
                     </div>
+                    <div style={{ marginTop: '18px', paddingTop: '14px', borderTop: '1px solid var(--border-light)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                            <span style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--text-muted)', fontWeight: 700 }}>
+                                Exercise Contribution Today
+                            </span>
+                            <strong style={{ fontSize: '12px', color: 'var(--teal)' }}>
+                                {exerciseDistribution.todayTotal} reps
+                            </strong>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {EXERCISE_ORDER.map((exercise) => {
+                                const reps = exerciseDistribution.byExercise[exercise] ?? 0;
+                                const share = exerciseDistribution.todayTotal > 0
+                                    ? Math.round((reps / exerciseDistribution.todayTotal) * 100)
+                                    : 0;
+
+                                return (
+                                    <div key={exercise} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: '10px', alignItems: 'center' }}>
+                                        <div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
+                                                <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{EXERCISE_LABELS[exercise]}</span>
+                                                <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--mono)', fontSize: '11px' }}>{share}%</span>
+                                            </div>
+                                            <div style={{ height: '6px', background: 'rgba(148,163,184,.15)', borderRadius: '999px', overflow: 'hidden' }}>
+                                                <div
+                                                    style={{
+                                                        width: `${share}%`,
+                                                        height: '100%',
+                                                        borderRadius: '999px',
+                                                        background: 'linear-gradient(90deg, rgba(34,211,238,.95), rgba(59,130,246,.9))',
+                                                        transition: 'width .35s ease',
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                        <strong style={{ fontSize: '12px', color: 'var(--text-primary)', minWidth: '58px', textAlign: 'right' }}>
+                                            {reps} reps
+                                        </strong>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
                 </div>
 
                 <div className="stack-column">
@@ -213,4 +296,61 @@ export default function MovementAnalysis() {
             </div>
         </>
     );
+}
+
+function readTodayExerciseDistribution(storageUid: string): TodayExerciseDistribution {
+    if (typeof window === 'undefined') {
+        return createEmptyDistribution();
+    }
+
+    const dateKey = getLocalDateKey();
+    const storageKey = `${DAILY_REP_STORAGE_KEY_PREFIX}:${storageUid}:${dateKey}`;
+    const repMap = parseRepMap(window.localStorage.getItem(storageKey));
+
+    const todayTotal = EXERCISE_ORDER.reduce((sum, exercise) => sum + (repMap[exercise] ?? 0), 0);
+    return {
+        todayTotal,
+        byExercise: repMap,
+    };
+}
+
+function parseRepMap(raw: string | null): Partial<Record<ExerciseType, number>> {
+    const byExercise = createEmptyDistribution().byExercise;
+    if (!raw) return byExercise;
+
+    try {
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        for (const exercise of EXERCISE_ORDER) {
+            const value = parsed[exercise];
+            byExercise[exercise] =
+                typeof value === 'number' && Number.isFinite(value) && value >= 0
+                    ? Math.floor(value)
+                    : 0;
+        }
+        return byExercise;
+    } catch {
+        return byExercise;
+    }
+}
+
+function createEmptyDistribution(): TodayExerciseDistribution {
+    const byExercise: Partial<Record<ExerciseType, number>> = {};
+    for (const exercise of EXERCISE_ORDER) {
+        byExercise[exercise] = 0;
+    }
+    return {
+        todayTotal: 0,
+        byExercise,
+    };
+}
+
+function getLocalDateKey(): string {
+    return toDateKey(new Date());
+}
+
+function toDateKey(date: Date): string {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
 }

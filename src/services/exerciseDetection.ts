@@ -3,7 +3,7 @@ const RAD_TO_DEG = 180 / Math.PI;
 export type ExerciseType =
   | "wrist_flexion"
   | "wrist_extension"
-  | "wrist_rotation"
+  | "front_shoulder_raise"
   | "radial_deviation"
   | "ulnar_deviation";
 
@@ -45,7 +45,7 @@ interface ExerciseConfig {
   activationDelta: number;
   angleTolerance: number;
   wrongDirectionTolerance: number;
-  angleSource: "flexion" | "deviation" | "rotation";
+  angleSource: "flexion" | "deviation" | "rotation" | "shoulder_combo";
   primaryGyroAxis: Axis;
 }
 
@@ -74,14 +74,14 @@ const EXERCISE_CONFIG: Record<ExerciseType, ExerciseConfig> = {
     angleSource: "flexion",
     primaryGyroAxis: "x",
   },
-  wrist_rotation: {
-    targetAngle: 60,
-    startNeutralBand: 10,
-    activationDelta: 6,
-    angleTolerance: 5,
-    wrongDirectionTolerance: 10,
-    angleSource: "rotation",
-    primaryGyroAxis: "z",
+  front_shoulder_raise: {
+    targetAngle: 12,
+    startNeutralBand: 8,
+    activationDelta: 5,
+    angleTolerance: 4,
+    wrongDirectionTolerance: 7,
+    angleSource: "flexion",
+    primaryGyroAxis: "x",
   },
   radial_deviation: {
     targetAngle: 4,
@@ -220,6 +220,9 @@ export class ExerciseDetector {
   private resolveCurrentAngle(config: ExerciseConfig, angles: WristAngles): number {
     if (config.angleSource === "rotation") {
       return this.rotationAngle;
+    }
+    if (config.angleSource === "shoulder_combo") {
+      return Math.max(Math.abs(angles.flexionDeg), Math.abs(angles.deviationDeg));
     }
     if (config.angleSource === "deviation") {
       return angles.deviationDeg;
