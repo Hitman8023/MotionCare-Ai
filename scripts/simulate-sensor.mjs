@@ -65,35 +65,134 @@ async function markUidActive(patientUID) {
   ]);
 }
 
-const jitter = (base, range) => Number((base + (Math.random() * 2 - 1) * range).toFixed(2));
+const WRITE_INTERVAL_MS = 140;
+
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+const roundTo = (value, digits = 2) => Number(value.toFixed(digits));
+
+const noiseState = {
+  temp: 0,
+  hr: 0,
+  spo2: 0,
+  accX: 0,
+  accY: 0,
+  accZ: 0,
+  gyroX: 0,
+  gyroY: 0,
+  gyroZ: 0,
+};
+
+function walkNoise(current, step, limit) {
+  const next = current + (Math.random() * 2 - 1) * step;
+  return clamp(next, -limit, limit);
+}
+
+function buildSmoothPayload(elapsedSec) {
+  noiseState.temp = walkNoise(noiseState.temp, 0.01, 0.12);
+  noiseState.hr = walkNoise(noiseState.hr, 0.02, 0.32);
+  noiseState.spo2 = walkNoise(noiseState.spo2, 0.01, 0.2);
+  noiseState.accX = walkNoise(noiseState.accX, 0.004, 0.06);
+  noiseState.accY = walkNoise(noiseState.accY, 0.004, 0.06);
+  noiseState.accZ = walkNoise(noiseState.accZ, 0.004, 0.06);
+  noiseState.gyroX = walkNoise(noiseState.gyroX, 0.08, 1.6);
+  noiseState.gyroY = walkNoise(noiseState.gyroY, 0.08, 1.6);
+  noiseState.gyroZ = walkNoise(noiseState.gyroZ, 0.08, 1.8);
+
+  const t = elapsedSec;
+
+  const temperature =
+    36.7 +
+    Math.sin(t * 0.26) * 0.28 +
+    Math.sin(t * 0.08 + 1.4) * 0.14 +
+    noiseState.temp;
+
+  const heartRate =
+    78 +
+    Math.sin(t * 0.42 + 0.3) * 7 +
+    Math.sin(t * 0.12 + 1.2) * 4 +
+    noiseState.hr * 10;
+
+  const spo2 =
+    97 +
+    Math.sin(t * 0.2 + 2.3) * 0.6 +
+    Math.sin(t * 0.07) * 0.25 +
+    noiseState.spo2;
+
+  const accX =
+    Math.sin(t * 1.15) * 0.16 +
+    Math.sin(t * 0.48 + 0.8) * 0.06 +
+    noiseState.accX;
+  const accY =
+    -0.98 +
+    Math.cos(t * 1.1 + 0.4) * 0.14 +
+    Math.sin(t * 0.32 + 2.2) * 0.05 +
+    noiseState.accY;
+  const accZ =
+    0.12 +
+    Math.sin(t * 1.3 + 1.1) * 0.15 +
+    Math.cos(t * 0.37) * 0.05 +
+    noiseState.accZ;
+
+  const gyroX =
+    Math.sin(t * 1.28 + 0.6) * 24 +
+    Math.sin(t * 0.34 + 2.4) * 8 +
+    noiseState.gyroX;
+  const gyroY =
+    Math.cos(t * 1.04 + 1.7) * 18 +
+    Math.sin(t * 0.43 + 0.9) * 6 +
+    noiseState.gyroY;
+  const gyroZ =
+    Math.sin(t * 1.4 + 2.1) * 20 +
+    Math.cos(t * 0.38 + 0.2) * 7 +
+    noiseState.gyroZ;
+
+  return {
+    timestamp: new Date().toISOString(),
+    temperature: roundTo(clamp(temperature, 35.8, 38.3), 2),
+    heart_rate: Math.round(clamp(heartRate, 58, 126)),
+    spo2: Math.round(clamp(spo2, 93, 100)),
+    acc_x: roundTo(clamp(accX, -2, 2), 3),
+    acc_y: roundTo(clamp(accY, -2, 2), 3),
+    acc_z: roundTo(clamp(accZ, -2, 2), 3),
+    gyro_x: roundTo(clamp(gyroX, -220, 220), 3),
+    gyro_y: roundTo(clamp(gyroY, -220, 220), 3),
+    gyro_z: roundTo(clamp(gyroZ, -220, 220), 3),
+  };
+}
 
 async function start() {
   try {
     const patientUID = await resolvePatientUID();
     await markUidActive(patientUID);
-    console.log(`Streaming random sensor data to /liveData/${patientUID} every 1 second...`);
+    console.log(`Streaming smooth sensor data to /liveData/${patientUID} every ${WRITE_INTERVAL_MS}ms...`);
 
-    setInterval(async () => {
-      const payload = {
-        timestamp: new Date().toISOString(),
-        temperature: jitter(36.7, 0.7),
-        heart_rate: Math.round(jitter(78, 12)),
-        spo2: Math.round(jitter(97, 2)),
-        acc_x: jitter(0.02, 0.15),
-        acc_y: jitter(-0.98, 0.15),
-        acc_z: jitter(0.11, 0.15),
-        gyro_x: jitter(0.01, 0.08),
-        gyro_y: jitter(0.03, 0.08),
-        gyro_z: jitter(-0.02, 0.08)
-      };
+    const startedAt = Date.now();
+    let sampleCount = 0;
+
+    while (true) {
+      const tickStartedAt = Date.now();
+      const elapsedSec = (tickStartedAt - startedAt) / 1000;
+      const payload = buildSmoothPayload(elapsedSec);
 
       try {
         await set(ref(db, `liveData/${patientUID}`), payload);
-        console.log(`[${payload.timestamp}] write ok`, payload);
+        sampleCount += 1;
+
+        if (sampleCount % Math.round(1000 / WRITE_INTERVAL_MS) === 0) {
+          console.log(
+            `[${payload.timestamp}] smooth stream ok | HR ${payload.heart_rate} bpm | SpO2 ${payload.spo2}% | gyroX ${payload.gyro_x}`,
+          );
+        }
       } catch (error) {
         console.error('Write failed:', error?.message || error);
       }
-    }, 1000);
+
+      const elapsedMs = Date.now() - tickStartedAt;
+      const sleepMs = Math.max(0, WRITE_INTERVAL_MS - elapsedMs);
+      if (sleepMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, sleepMs));
+      }
+    }
   } catch (error) {
     console.error(error?.message || error);
     console.error('Usage: node scripts/simulate-sensor.mjs <patientUID>');

@@ -84,7 +84,7 @@ const EXERCISE_CONFIG: Record<ExerciseType, ExerciseConfig> = {
     primaryGyroAxis: "z",
   },
   radial_deviation: {
-    targetAngle: 20,
+    targetAngle: 4,
     startNeutralBand: 6,
     activationDelta: 4,
     angleTolerance: 3,
@@ -93,7 +93,7 @@ const EXERCISE_CONFIG: Record<ExerciseType, ExerciseConfig> = {
     primaryGyroAxis: "y",
   },
   ulnar_deviation: {
-    targetAngle: -25,
+    targetAngle: -4,
     startNeutralBand: 6,
     activationDelta: 4,
     angleTolerance: 3,

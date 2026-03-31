@@ -32,6 +32,37 @@ declare global {
 }
 
 const clamp = (val: number, min: number, max: number) => Math.min(max, Math.max(min, val));
+const applyDeadzone = (value: number, threshold: number) => (Math.abs(value) < threshold ? 0 : value);
+const smoothTowards = (prev: number, target: number, blend: number, maxStep: number) => {
+    const eased = prev + (target - prev) * blend;
+    return clamp(eased, prev - maxStep, prev + maxStep);
+};
+const expLerp = (deltaMs: number, tauMs: number) => {
+    const alpha = 1 - Math.exp(-deltaMs / Math.max(1, tauMs));
+    return clamp(alpha, 0.04, 0.92);
+};
+
+// If sensor mounting is inverted, flip signs here without touching downstream math.
+const AXIS_SIGN = {
+    ax: 1,
+    ay: 1,
+    az: 1,
+    gx: 1,
+    gy: 1,
+    gz: 1,
+} as const;
+
+const HAND_RENDER = {
+    angleToPixel: 3.9,
+    tiltGain: 1.8,
+    maxOffset: 165,
+    maxTilt: 36,
+    livePositionTauMs: 24,
+    idlePositionTauMs: 62,
+    liveTiltTauMs: 34,
+    idleTiltTauMs: 80,
+    frameIntervalMs: 14,
+} as const;
 
 const EXERCISE_META: Record<ExerciseType, { label: string; cue: string; targetAngle: number }> = {
     wrist_flexion: {
@@ -52,12 +83,12 @@ const EXERCISE_META: Record<ExerciseType, { label: string; cue: string; targetAn
     radial_deviation: {
         label: 'Radial Deviation',
         cue: 'Tilt wrist toward thumb side',
-        targetAngle: 20,
+        targetAngle: 4,
     },
     ulnar_deviation: {
         label: 'Ulnar Deviation',
         cue: 'Tilt wrist toward little finger side',
-        targetAngle: -25,
+        targetAngle: -4,
     },
 };
 
@@ -74,29 +105,59 @@ const EXERCISE_DIRECTION: Record<ExerciseType, DirectionLabel> = {
     wrist_flexion: 'DOWN',
     wrist_extension: 'UP',
     wrist_rotation: 'CLOCKWISE',
-    radial_deviation: 'RIGHT',
-    ulnar_deviation: 'LEFT',
+    radial_deviation: 'LEFT',
+    ulnar_deviation: 'RIGHT',
 };
 
-function resolveUserDirection(exercise: ExerciseType, sample: MotionSensorSample): DirectionLabel {
-    switch (exercise) {
-        case 'wrist_flexion':
-        case 'wrist_extension':
-            if (sample.gx > 8) return 'UP';
-            if (sample.gx < -8) return 'DOWN';
-            return 'STILL';
-        case 'radial_deviation':
-        case 'ulnar_deviation':
-            if (sample.gy > 8) return 'RIGHT';
-            if (sample.gy < -8) return 'LEFT';
-            return 'STILL';
-        case 'wrist_rotation':
-            if (sample.gz > 10) return 'CLOCKWISE';
-            if (sample.gz < -10) return 'COUNTERCLOCKWISE';
-            return 'STILL';
-        default:
-            return 'STILL';
+const EXERCISE_TARGET_TOLERANCE: Record<ExerciseType, number> = {
+    wrist_flexion: 5,
+    wrist_extension: 5,
+    wrist_rotation: 8,
+    radial_deviation: 2,
+    ulnar_deviation: 2,
+};
+
+const REP_NEUTRAL_MIN = -2;
+const REP_NEUTRAL_MAX = 2;
+
+function updateAngle(gx: number, ax: number, ay: number, az: number, dt: number, prevAngle: number) {
+    void ax;
+    const accelAngle = Math.atan2(ay, az) * (180 / Math.PI);
+    const alpha = 0.96;
+    return alpha * (prevAngle + gx * dt) + (1 - alpha) * accelAngle;
+}
+
+function getDirectionForExercise(
+    exercise: ExerciseType,
+    angleMetric: number,
+    sample: MotionSensorSample,
+): DirectionLabel {
+    if (exercise === 'wrist_rotation') {
+        if (sample.gz > 10) return 'CLOCKWISE';
+        if (sample.gz < -10) return 'COUNTERCLOCKWISE';
+        return 'STILL';
     }
+
+    if (exercise === 'radial_deviation' || exercise === 'ulnar_deviation') {
+        if (angleMetric > 3) return 'RIGHT';
+        if (angleMetric < -3) return 'LEFT';
+        return 'STILL';
+    }
+
+    if (angleMetric > 15) return 'UP';
+    if (angleMetric < -15) return 'DOWN';
+    return 'STILL';
+}
+
+function isAtOrBeyondTarget(angle: number, target: number, tolerance: number): boolean {
+    if (target >= 0) {
+        return angle >= target - tolerance;
+    }
+    return angle <= target + tolerance;
+}
+
+function isInRepNeutralZone(angle: number): boolean {
+    return angle >= REP_NEUTRAL_MIN && angle <= REP_NEUTRAL_MAX;
 }
 
 function makePath(data: number[], w: number, h: number, pad = 4) {
@@ -217,18 +278,29 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
         movement_quality: 'incorrect',
     });
     const [motBuf, setMotBuf] = useState<number[]>(() =>
-        Array.from({ length: 40 }, (_, i) => Math.sin(i * 0.4) * 20 + 24 + Math.random() * 8)
+        Array.from({ length: 40 }, (_, i) => Math.sin(i * 0.28) * 6 + 24)
     );
     const sampleRef = useRef<MotionSensorSample>({ ax: 0, ay: 0, az: 0.93, gx: 12.4, gy: -5.7, gz: 0 });
     const detectorRef = useRef<ExerciseDetector>(new ExerciseDetector('wrist_flexion'));
     const motionTrendRef = useRef(0);
     const lastLiveSampleAtRef = useRef(0);
+    const angleXRef = useRef(0);
+    const lastSampleAtRef = useRef(0);
+    const sampleSeqRef = useRef(0);
+    const processedSeqRef = useRef(-1);
+    const repCountRef = useRef(0);
+    const repArmedRef = useRef(false);
+    const lastAngleLogAtRef = useRef(0);
+    const lastRenderAtRef = useRef(0);
+    const motLevelRef = useRef(24);
     const exerciseMenuRef = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
         detectorRef.current.setExercise(selectedExercise, true);
         setIsExerciseMenuOpen(false);
         setRepCount(0);
+        repCountRef.current = 0;
+        repArmedRef.current = false;
         setAnalysis({
             exercise: selectedExercise,
             current_angle: 0,
@@ -237,6 +309,11 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
             stability_score: 100,
             movement_quality: 'incorrect',
         });
+        angleXRef.current = 0;
+        lastSampleAtRef.current = 0;
+        sampleSeqRef.current = 0;
+        processedSeqRef.current = -1;
+        lastRenderAtRef.current = 0;
         setGuidance(`Selected ${EXERCISE_META[selectedExercise].label}. ${EXERCISE_META[selectedExercise].cue}.`);
     }, [selectedExercise]);
 
@@ -267,24 +344,54 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
 
     useEffect(() => {
         const interval = setInterval(() => {
-            const mot = Math.sin(Date.now() / 1200) * 22 + 24 + Math.random() * 6;
-            setMotBuf((prev) => [...prev.slice(1), mot]);
-        }, 1200);
+            const current = sampleRef.current;
+            const gyroEnergy = Math.hypot(current.gx, current.gy, current.gz) * 0.22;
+            const accelEnergy = Math.hypot(current.ax, current.ay, current.az - 1) * 18;
+            const idlePulse = Date.now() - lastLiveSampleAtRef.current > 2500 ? Math.sin(Date.now() / 780) * 2 : 0;
+            const target = clamp(14 + gyroEnergy + accelEnergy + idlePulse, 6, 92);
+
+            motLevelRef.current = motLevelRef.current + (target - motLevelRef.current) * 0.18;
+            setMotBuf((prev) => [...prev.slice(1), motLevelRef.current]);
+        }, 120);
         return () => clearInterval(interval);
     }, []);
 
     useEffect(() => {
         const pushSample = (sample: MotionSensorSample, live = false) => {
+            const prev = sampleRef.current;
+            const blend = live ? 0.34 : 0.24;
+
+            const nextAx = clamp(sample.ax, -2, 2);
+            const nextAy = clamp(sample.ay, -2, 2);
+            const nextAz = clamp(sample.az, -2, 2);
+            const nextGx = applyDeadzone(clamp(sample.gx * AXIS_SIGN.gx, -350, 350), 0.8);
+            const nextGy = applyDeadzone(clamp(sample.gy * AXIS_SIGN.gy, -350, 350), 0.8);
+            const nextGz = applyDeadzone(clamp(sample.gz * AXIS_SIGN.gz, -350, 350), 0.9);
+            const accelStep = live ? 0.18 : 0.1;
+
             sampleRef.current = {
-                ax: clamp(sample.ax, -2, 2),
-                ay: clamp(sample.ay, -2, 2),
-                az: clamp(sample.az, -2, 2),
-                gx: clamp(sample.gx, -350, 350),
-                gy: clamp(sample.gy, -350, 350),
-                gz: clamp(sample.gz, -350, 350),
+                ax: smoothTowards(prev.ax, nextAx * AXIS_SIGN.ax, blend * 0.95, accelStep),
+                ay: smoothTowards(prev.ay, nextAy * AXIS_SIGN.ay, blend * 0.95, accelStep),
+                az: smoothTowards(prev.az, nextAz * AXIS_SIGN.az, blend * 0.95, accelStep),
+                gx: smoothTowards(prev.gx, nextGx, blend, live ? 22 : 14),
+                gy: smoothTowards(prev.gy, nextGy, blend, live ? 22 : 14),
+                gz: smoothTowards(prev.gz, nextGz, blend, live ? 22 : 14),
             };
+
+            const nowMs = Date.now();
+            const dt =
+                lastSampleAtRef.current > 0
+                    ? clamp((nowMs - lastSampleAtRef.current) / 1000, 0.004, 0.12)
+                    : HAND_RENDER.frameIntervalMs / 1000;
+            lastSampleAtRef.current = nowMs;
+
+            const current = sampleRef.current;
+            const fusedAngle = updateAngle(current.gx, current.ax, current.ay, current.az, dt, angleXRef.current);
+            angleXRef.current = fusedAngle;
+            sampleSeqRef.current += 1;
+
             if (live) {
-                lastLiveSampleAtRef.current = Date.now();
+                lastLiveSampleAtRef.current = nowMs;
                 setSensorMode('LIVE SENSOR');
             }
         };
@@ -314,6 +421,9 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
         }
 
         const onCustomSensor = (event: CustomEvent<SensorPayload>) => {
+            if (patientUid) {
+                return;
+            }
             const payload = event.detail;
             if (!payload) {
                 return;
@@ -334,6 +444,9 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
         window.addEventListener('motioncare-sensor', onCustomSensor as EventListener);
 
         const onDeviceMotion = (event: DeviceMotionEvent) => {
+            if (patientUid) {
+                return;
+            }
             const acc = event.accelerationIncludingGravity;
             const rot = event.rotationRate;
             if (!acc) {
@@ -375,51 +488,138 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
 
         const renderInterval = setInterval(() => {
             const current = sampleRef.current;
-            const targetX = clamp(current.ax * 100, -120, 120);
-            const targetY = clamp(-current.ay * 100, -120, 120);
-            const targetTilt = clamp(current.gz * 1.8, -28, 28);
-            const targetScaleY = clamp(1 - Math.abs(current.gx) / 800, 0.88, 1.06);
+            const nowMs = Date.now();
+            const isLiveStream = nowMs - lastLiveSampleAtRef.current < 2500;
+            const frameDtMs =
+                lastRenderAtRef.current > 0
+                    ? clamp(nowMs - lastRenderAtRef.current, 8, 48)
+                    : HAND_RENDER.frameIntervalMs;
+            lastRenderAtRef.current = nowMs;
 
-            setRenderX((prev) => prev + (targetX - prev) * 0.3);
-            setRenderY((prev) => prev + (targetY - prev) * 0.3);
-            setRenderTilt((prev) => prev + (targetTilt - prev) * 0.25);
-            setRenderScaleY((prev) => prev + (targetScaleY - prev) * 0.25);
+            const stabilizedFlexAngle = angleXRef.current;
+            const stabilizedDeviationAngle = Math.atan2(current.ax, current.az) * (180 / Math.PI);
 
-            setAx(current.ax);
-            setAy(current.ay);
-            setAz(current.az);
-            setGx(current.gx);
-            setGy(current.gy);
-            setGz(current.gz);
-
-            const nextResult = detectorRef.current.update({
-                timestampMs: Date.now(),
-                accelX: current.ax,
-                accelY: current.ay,
-                accelZ: current.az,
-                gyroX: current.gx,
-                gyroY: current.gy,
-                gyroZ: current.gz,
-            });
-            setAnalysis(nextResult);
-            setRepCount(nextResult.repetitions);
-            setAngle(nextResult.current_angle);
-
-            const absX = Math.abs(targetX);
-            const absY = Math.abs(targetY);
-            const centered = absX <= 18 && absY <= 18;
-            const expectedDirection = EXERCISE_DIRECTION[selectedExercise];
-            const userDirection = resolveUserDirection(selectedExercise, current);
-            setDirection(userDirection);
-
-            if (userDirection === 'STILL' || centered) {
-                setGuidance(`Move ${expectedDirection.toLowerCase()} for ${selectedExerciseMeta.label}.`);
-            } else if (userDirection === expectedDirection) {
-                setGuidance(`Correct direction (${userDirection}). Continue and return to neutral for rep count.`);
-            } else {
-                setGuidance(`Incorrect direction (${userDirection}). Move ${expectedDirection.toLowerCase()} instead.`);
+            if (nowMs - lastAngleLogAtRef.current >= 120) {
+                console.log('ANGLE:', Number(stabilizedFlexAngle.toFixed(2)));
+                lastAngleLogAtRef.current = nowMs;
             }
-        }, 33);
+
+            const targetX = clamp(
+                -stabilizedDeviationAngle * HAND_RENDER.angleToPixel,
+                -HAND_RENDER.maxOffset,
+                HAND_RENDER.maxOffset,
+            );
+            const targetY = clamp(
+                -stabilizedFlexAngle * HAND_RENDER.angleToPixel,
+                -HAND_RENDER.maxOffset,
+                HAND_RENDER.maxOffset,
+            );
+            const targetTilt = clamp(
+                current.gz * HAND_RENDER.tiltGain,
+                -HAND_RENDER.maxTilt,
+                HAND_RENDER.maxTilt,
+            );
+            const targetScaleY = clamp(1 - Math.abs(current.gx) / 650, 0.86, 1.08);
+
+            const basePositionLerp = expLerp(
+                frameDtMs,
+                isLiveStream ? HAND_RENDER.livePositionTauMs : HAND_RENDER.idlePositionTauMs,
+            );
+            const baseTiltLerp = expLerp(
+                frameDtMs,
+                isLiveStream ? HAND_RENDER.liveTiltTauMs : HAND_RENDER.idleTiltTauMs,
+            );
+            const positionLerp = clamp(basePositionLerp, 0.08, 0.9);
+            const tiltLerp = clamp(baseTiltLerp, 0.06, 0.86);
+
+            setRenderX((prev) => prev + (targetX - prev) * positionLerp);
+            setRenderY((prev) => prev + (targetY - prev) * positionLerp);
+            setRenderTilt((prev) => prev + (targetTilt - prev) * tiltLerp);
+            setRenderScaleY((prev) => prev + (targetScaleY - prev) * tiltLerp);
+
+            if (sampleSeqRef.current !== processedSeqRef.current) {
+                processedSeqRef.current = sampleSeqRef.current;
+
+                setAx(current.ax);
+                setAy(current.ay);
+                setAz(current.az);
+                setGx(current.gx);
+                setGy(current.gy);
+                setGz(current.gz);
+
+                const nextResult = detectorRef.current.update({
+                    timestampMs: lastSampleAtRef.current || nowMs,
+                    accelX: current.ax,
+                    accelY: current.ay,
+                    accelZ: current.az,
+                    gyroX: current.gx,
+                    gyroY: current.gy,
+                    gyroZ: current.gz,
+                    flexionAngle: stabilizedFlexAngle,
+                });
+                const selectedTargetAngle = EXERCISE_META[selectedExercise].targetAngle;
+
+                const displayAngle =
+                    selectedExercise === 'wrist_rotation'
+                        ? nextResult.current_angle
+                        : selectedExercise === 'radial_deviation' || selectedExercise === 'ulnar_deviation'
+                            ? stabilizedDeviationAngle
+                            : stabilizedFlexAngle;
+                const roundedDisplayAngle = Math.round(displayAngle);
+                setAngle(roundedDisplayAngle);
+
+                const targetTolerance = EXERCISE_TARGET_TOLERANCE[selectedExercise];
+                const isTargetReached = isAtOrBeyondTarget(displayAngle, selectedTargetAngle, targetTolerance);
+                const inRepNeutral = isInRepNeutralZone(displayAngle);
+
+                if (inRepNeutral) {
+                    repArmedRef.current = true;
+                }
+
+                let repIncremented = false;
+                if (repArmedRef.current && isTargetReached) {
+                    repCountRef.current += 1;
+                    setRepCount(repCountRef.current);
+                    repArmedRef.current = false;
+                    repIncremented = true;
+                }
+
+                const expectedDirection = EXERCISE_DIRECTION[selectedExercise];
+                const directionMetric =
+                    selectedExercise === 'wrist_rotation'
+                        ? nextResult.current_angle
+                        : selectedExercise === 'radial_deviation' || selectedExercise === 'ulnar_deviation'
+                            ? stabilizedDeviationAngle
+                            : stabilizedFlexAngle;
+
+                const userDirection = getDirectionForExercise(selectedExercise, directionMetric, current);
+                setDirection(userDirection);
+
+                const isDirectionCorrect = userDirection === expectedDirection;
+                const movementQuality: ExerciseDetectionOutput['movement_quality'] =
+                    isTargetReached ? 'correct' : 'incorrect';
+
+                setAnalysis({
+                    ...nextResult,
+                    current_angle: roundedDisplayAngle,
+                    target_angle: selectedTargetAngle,
+                    repetitions: repCountRef.current,
+                    movement_quality: movementQuality,
+                });
+
+                if (repIncremented) {
+                    setGuidance(`Rep ${repCountRef.current} counted at target ${selectedTargetAngle}°. Return to -2..2 to arm next rep.`);
+                } else if (isTargetReached) {
+                    setGuidance(`Target matched at ${selectedTargetAngle}°. Move back to -2..2 to count the next rep.`);
+                } else if (userDirection === 'STILL') {
+                    setGuidance(`Move ${expectedDirection.toLowerCase()} for ${selectedExerciseMeta.label}.`);
+                } else if (isDirectionCorrect) {
+                    setGuidance(`Correct direction (${userDirection}). Keep moving to reach ${selectedTargetAngle}°.`);
+                } else {
+                    setGuidance(`Incorrect motion (${userDirection}). Move ${expectedDirection.toLowerCase()} instead.`);
+                }
+            }
+        }, HAND_RENDER.frameIntervalMs);
 
         return () => {
             clearInterval(simInterval);
@@ -444,14 +644,32 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
     }, [isFullscreenSim]);
 
     const motSpark = makePath(motBuf, 320, 48);
-    const fmtSigned = (value: number, digits: number) => `${value > 0 ? '+' : ''}${value.toFixed(digits)}`;
+    const fmtSigned = (value: number, digits: number) => value.toFixed(digits);
     const handTransform = `translate(${renderX}px, ${renderY}px) rotate(${renderTilt}deg) scaleY(${renderScaleY})`;
     const selectedExerciseMeta = EXERCISE_META[selectedExercise];
     const expectedDirection = EXERCISE_DIRECTION[selectedExercise];
-    const isDirectionCorrect = direction === expectedDirection;
-    const angleDeviation = analysis.current_angle - analysis.target_angle;
-    const qualityColor = isDirectionCorrect ? 'var(--green)' : 'var(--orange)';
-    const qualityLabel = isDirectionCorrect ? 'Correct Direction' : 'Incorrect Direction';
+    const targetTolerance = EXERCISE_TARGET_TOLERANCE[selectedExercise];
+    const isTargetReached = isAtOrBeyondTarget(analysis.current_angle, selectedExerciseMeta.targetAngle, targetTolerance);
+    const isNeutralMotion = direction === 'STILL' && !isTargetReached;
+    const qualityMode: 'neutral' | 'correct' | 'incorrect' = isNeutralMotion
+        ? 'neutral'
+        : analysis.movement_quality === 'correct'
+            ? 'correct'
+            : 'incorrect';
+    const isDirectionCorrect = qualityMode === 'correct';
+    const angleDeviation = analysis.current_angle - selectedExerciseMeta.targetAngle;
+    const qualityColor =
+        qualityMode === 'neutral'
+            ? 'var(--blue)'
+            : isDirectionCorrect
+                ? 'var(--green)'
+                : 'var(--orange)';
+    const qualityLabel =
+        qualityMode === 'neutral'
+            ? 'Neutral Position'
+            : isDirectionCorrect
+                ? 'Correct Direction'
+                : 'Incorrect Direction';
 
     return (
         <>
@@ -519,7 +737,7 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                             </div>
                         )}
                     </div>
-                    <span className="exercise-target-chip">Target: {analysis.target_angle}°</span>
+                    <span className="exercise-target-chip">Target: {fmtSigned(selectedExerciseMeta.targetAngle, 0)}°</span>
                 </div>
 
                 <div className="motion-card-grid">
@@ -538,7 +756,7 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                             </div>
                         </button>
                         <div style={{ marginTop: '12px', textAlign: 'center' }}>
-                            <div className="angle-big">{angle}°</div>
+                            <div className="angle-big">{fmtSigned(angle, 0)}°</div>
                             <div className="angle-axis">{selectedExerciseMeta.label} Angle</div>
                             <div className="hand-guidance-text">{guidance}</div>
                         </div>
@@ -600,11 +818,11 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                         <span className="mini-tag tag-ai">AI</span>
                     </div>
                     <div className="quality-row">
-                        <div className="quality-icon" style={{ background: isDirectionCorrect ? 'rgba(52,211,153,.12)' : 'rgba(251,191,36,.12)' }}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={isDirectionCorrect ? '#34d399' : '#fbbf24'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                        <div className="quality-icon" style={{ background: qualityMode === 'neutral' ? 'rgba(96,165,250,.12)' : isDirectionCorrect ? 'rgba(52,211,153,.12)' : 'rgba(251,191,36,.12)' }}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={qualityMode === 'neutral' ? '#60a5fa' : isDirectionCorrect ? '#34d399' : '#fbbf24'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                         </div>
                         <div><div className="quality-label" style={{ color: qualityColor }}>{qualityLabel}</div><div className="quality-sub">Correct: {expectedDirection} · Your: {direction}</div></div>
-                        <div className="quality-val" style={{ color: qualityColor }}>{isDirectionCorrect ? '✓' : '!'}</div>
+                        <div className="quality-val" style={{ color: qualityColor }}>{qualityMode === 'neutral' ? '•' : isDirectionCorrect ? '✓' : '!'}</div>
                     </div>
                     <div className="quality-row">
                         <div className="quality-icon" style={{ background: 'rgba(34,211,238,.12)' }}>
@@ -623,7 +841,9 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                     <div className="ai-recommendation-panel">
                         <div className="ai-recommendation-title">AI Recommendation</div>
                         <div className="ai-recommendation-copy">
-                            {isDirectionCorrect
+                            {qualityMode === 'neutral'
+                                ? `Neutral position detected. Move ${expectedDirection.toLowerCase()} to begin a valid repetition.`
+                                : isDirectionCorrect
                                 ? `Direction is correct (${direction}). Keep controlled return to neutral for repetition counting.`
                                 : `Move ${expectedDirection.toLowerCase()} for ${selectedExerciseMeta.label}. Your current direction is ${direction}.`}
                         </div>
@@ -646,7 +866,7 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                     </div>
                     <div className="insight-card warn">
                         <div className="insight-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg></div>
-                        <div><div className="insight-text">Current angle {analysis.current_angle}° vs target {analysis.target_angle}° for {selectedExerciseMeta.label}.</div><div className="insight-time">Live</div></div>
+                        <div><div className="insight-text">Current angle {fmtSigned(analysis.current_angle, 0)}° vs target {fmtSigned(selectedExerciseMeta.targetAngle, 0)}° for {selectedExerciseMeta.label}.</div><div className="insight-time">Live</div></div>
                     </div>
                     <div className="insight-card success">
                         <div className="insight-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg></div>
@@ -685,8 +905,8 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                                 <div className="hand-sim-guidance">{guidance}</div>
                                 <div className="hand-sim-metrics">X: {fmtSigned(renderX, 0)}px</div>
                                 <div className="hand-sim-metrics">Y: {fmtSigned(renderY, 0)}px</div>
-                                <div className="hand-sim-metrics">Angle: {angle}°</div>
-                                <div className="hand-sim-metrics">Target: {analysis.target_angle}°</div>
+                                <div className="hand-sim-metrics">Angle: {fmtSigned(angle, 0)}°</div>
+                                <div className="hand-sim-metrics">Target: {fmtSigned(selectedExerciseMeta.targetAngle, 0)}°</div>
                                 <div className="hand-sim-metrics">Direction: {direction}</div>
                                 <div className="hand-sim-metrics">Quality: {analysis.movement_quality}</div>
                             </div>

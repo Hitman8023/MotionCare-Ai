@@ -150,15 +150,43 @@ export function subscribeToPatientLiveData(
     onError?: (error: Error) => void,
 ): () => void {
     const liveRef = ref(realtimeDb, `liveData/${patientUid}`);
-    return onValue(
+    const legacyLiveRef = ref(realtimeDb, `LiveData/${patientUid}`);
+
+    let primarySample: SensorSample | null = null;
+    let legacySample: SensorSample | null = null;
+
+    const emit = () => {
+        onData(primarySample ?? legacySample);
+    };
+
+    const unsubPrimary = onValue(
         liveRef,
         (snapshot) => {
-            onData(normalizeSensorSample(snapshot.val()));
+            primarySample = normalizeSensorSample(snapshot.val());
+            emit();
         },
         (error) => {
             if (onError) onError(error as Error);
         },
     );
+
+    const unsubLegacy = onValue(
+        legacyLiveRef,
+        (snapshot) => {
+            legacySample = normalizeSensorSample(snapshot.val());
+            if (!primarySample) {
+                emit();
+            }
+        },
+        (error) => {
+            if (onError) onError(error as Error);
+        },
+    );
+
+    return () => {
+        unsubPrimary();
+        unsubLegacy();
+    };
 }
 
 export function subscribeToAllPatientsLiveData(
@@ -166,15 +194,41 @@ export function subscribeToAllPatientsLiveData(
     onError?: (error: Error) => void,
 ): () => void {
     const liveRootRef = ref(realtimeDb, 'liveData');
-    return onValue(
+    const legacyLiveRootRef = ref(realtimeDb, 'LiveData');
+
+    let primaryMap: LiveDataMap = {};
+    let legacyMap: LiveDataMap = {};
+
+    const emit = () => {
+        onData({ ...legacyMap, ...primaryMap });
+    };
+
+    const unsubPrimary = onValue(
         liveRootRef,
         (snapshot) => {
-            onData(normalizeLiveDataMap(snapshot.val()));
+            primaryMap = normalizeLiveDataMap(snapshot.val());
+            emit();
         },
         (error) => {
             if (onError) onError(error as Error);
         },
     );
+
+    const unsubLegacy = onValue(
+        legacyLiveRootRef,
+        (snapshot) => {
+            legacyMap = normalizeLiveDataMap(snapshot.val());
+            emit();
+        },
+        (error) => {
+            if (onError) onError(error as Error);
+        },
+    );
+
+    return () => {
+        unsubPrimary();
+        unsubLegacy();
+    };
 }
 
 export async function writeLiveSensorData(patientUid: string, sample: SensorSample): Promise<void> {
