@@ -25,6 +25,15 @@ type SensorPayload = {
     gz?: number;
 };
 
+const ZERO_MOTION_SAMPLE: MotionSensorSample = {
+    ax: 0,
+    ay: 0,
+    az: 0,
+    gx: 0,
+    gy: 0,
+    gz: 0,
+};
+
 declare global {
     interface WindowEventMap {
         'motioncare-sensor': CustomEvent<SensorPayload>;
@@ -137,6 +146,7 @@ const EXERCISE_TARGET_TOLERANCE: Record<ExerciseType, number> = {
 
 const REP_NEUTRAL_MIN = -2;
 const REP_NEUTRAL_MAX = 2;
+const DAILY_REP_STORAGE_KEY_PREFIX = 'motioncare:daily-reps:v1';
 
 function updateAngle(gx: number, ax: number, ay: number, az: number, dt: number, prevAngle: number) {
     void ax;
@@ -176,6 +186,47 @@ function isAtOrBeyondTarget(angle: number, target: number, tolerance: number): b
 
 function isInRepNeutralZone(angle: number): boolean {
     return angle >= REP_NEUTRAL_MIN && angle <= REP_NEUTRAL_MAX;
+}
+
+function getLocalDateKey(): string {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function getDailyRepStorageKey(patientUid?: string): string {
+    return `${DAILY_REP_STORAGE_KEY_PREFIX}:${patientUid ?? 'local'}:${getLocalDateKey()}`;
+}
+
+function loadDailyRepCount(exercise: ExerciseType, patientUid?: string): number {
+    if (typeof window === 'undefined') return 0;
+
+    try {
+        const raw = window.localStorage.getItem(getDailyRepStorageKey(patientUid));
+        if (!raw) return 0;
+        const parsed = JSON.parse(raw) as Partial<Record<ExerciseType, number>>;
+        const value = parsed?.[exercise];
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 0;
+        return Math.floor(value);
+    } catch {
+        return 0;
+    }
+}
+
+function saveDailyRepCount(exercise: ExerciseType, count: number, patientUid?: string): void {
+    if (typeof window === 'undefined') return;
+
+    try {
+        const key = getDailyRepStorageKey(patientUid);
+        const raw = window.localStorage.getItem(key);
+        const current = raw ? (JSON.parse(raw) as Partial<Record<ExerciseType, number>>) : {};
+        current[exercise] = Math.max(0, Math.floor(count));
+        window.localStorage.setItem(key, JSON.stringify(current));
+    } catch {
+        // Best-effort persistence; ignore storage quota or JSON issues.
+    }
 }
 
 function makePath(data: number[], w: number, h: number, pad = 4) {
@@ -274,9 +325,9 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
     const [angle, setAngle] = useState(0);
     const [ax, setAx] = useState(0);
     const [ay, setAy] = useState(0);
-    const [az, setAz] = useState(0.93);
-    const [gx, setGx] = useState(12.4);
-    const [gy, setGy] = useState(-5.7);
+    const [az, setAz] = useState(0);
+    const [gx, setGx] = useState(0);
+    const [gy, setGy] = useState(0);
     const [gz, setGz] = useState(0);
     const [renderX, setRenderX] = useState(0);
     const [renderY, setRenderY] = useState(0);
@@ -298,9 +349,8 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
     const [motBuf, setMotBuf] = useState<number[]>(() =>
         Array.from({ length: 40 }, (_, i) => Math.sin(i * 0.28) * 6 + 24)
     );
-    const sampleRef = useRef<MotionSensorSample>({ ax: 0, ay: 0, az: 0.93, gx: 12.4, gy: -5.7, gz: 0 });
+    const sampleRef = useRef<MotionSensorSample>({ ...ZERO_MOTION_SAMPLE });
     const detectorRef = useRef<ExerciseDetector>(new ExerciseDetector('wrist_flexion'));
-    const motionTrendRef = useRef(0);
     const lastLiveSampleAtRef = useRef(0);
     const angleXRef = useRef(0);
     const lastSampleAtRef = useRef(0);
@@ -316,14 +366,15 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
     useEffect(() => {
         detectorRef.current.setExercise(selectedExercise, true);
         setIsExerciseMenuOpen(false);
-        setRepCount(0);
-        repCountRef.current = 0;
+        const persistedRepCount = loadDailyRepCount(selectedExercise, patientUid);
+        setRepCount(persistedRepCount);
+        repCountRef.current = persistedRepCount;
         repArmedRef.current = false;
         setAnalysis({
             exercise: selectedExercise,
             current_angle: 0,
             target_angle: EXERCISE_META[selectedExercise].targetAngle,
-            repetitions: 0,
+            repetitions: persistedRepCount,
             stability_score: 100,
             movement_quality: 'incorrect',
         });
@@ -333,7 +384,7 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
         processedSeqRef.current = -1;
         lastRenderAtRef.current = 0;
         setGuidance(`Selected ${EXERCISE_META[selectedExercise].label}. ${EXERCISE_META[selectedExercise].cue}.`);
-    }, [selectedExercise]);
+    }, [selectedExercise, patientUid]);
 
     useEffect(() => {
         const onDocClick = (event: MouseEvent) => {
@@ -492,16 +543,8 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                 return;
             }
             setSensorMode('SIMULATED');
-            motionTrendRef.current += 0.03;
-            const t = motionTrendRef.current;
-            pushSample({
-                ax: Math.sin(t) * 0.5,
-                ay: Math.cos(t) * 0.25,
-                az: 0.93 + Math.cos(t * 0.45) * 0.04,
-                gx: Math.sin(t * 1.2) * 18,
-                gy: Math.cos(t * 0.9) * 13,
-                gz: Math.sin(t * 1.3) * 15,
-            });
+            // No live sensor attached: keep readings pinned to zero instead of synthetic motion.
+            pushSample(ZERO_MOTION_SAMPLE);
         }, 80);
 
         const renderInterval = setInterval(() => {
@@ -598,6 +641,7 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                 if (repArmedRef.current && isTargetReached) {
                     repCountRef.current += 1;
                     setRepCount(repCountRef.current);
+                    saveDailyRepCount(selectedExercise, repCountRef.current, patientUid);
                     repArmedRef.current = false;
                     repIncremented = true;
                 }

@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { subscribeToPatientLiveData } from "../services/realtimeDbService";
+import {
+  subscribeToPatientLiveData,
+  subscribeToPatientSessionHistory,
+  writePatientSessionSummary,
+} from "../services/realtimeDbService";
+import type { SessionSummary } from "../types/sensor";
 import {
   computeAccuracy,
-  computeConsistencyIntensity,
   computeFlexRange,
   computeRecoveryScore,
   computeGyroMagnitude,
@@ -14,6 +18,134 @@ import {
 type ProgressAlertsProps = {
   patientUid: string;
 };
+
+type WeekRow = {
+  key: string;
+  label: string;
+  shortLabel: string;
+  start: Date;
+  days: number[];
+};
+
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const HISTORY_WEEKS = 12;
+const HISTORY_DAYS = HISTORY_WEEKS * 7;
+
+const defaultSessionDefaults = {
+  lengthMinutes: 45,
+  targetReps: 30,
+  autosaveSeconds: 30,
+};
+
+function toDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(date: Date, offset: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + offset);
+  return next;
+}
+
+function completionPercentFromRatio(ratio: number): number {
+  return Math.round(Math.max(0, Math.min(1, ratio)) * 100);
+}
+
+function buildCheckpointGrid(
+  history: Record<string, SessionSummary>,
+  todayPercent: number,
+  days = HISTORY_DAYS,
+): number[] {
+  const today = new Date();
+  const startDate = addDays(today, -(days - 1));
+  return Array.from({ length: days }, (_, index) => {
+    const dayKey = toDateKey(addDays(startDate, index));
+    const summary = history[dayKey];
+    if (dayKey === toDateKey(today)) return todayPercent;
+    if (!summary) return 0;
+    return completionPercentFromRatio(summary.completionRatio || 0);
+  });
+}
+
+function buildWeeks(checkpoints: number[], startDate: Date): WeekRow[] {
+  const weeks: WeekRow[] = [];
+  for (let i = 0; i < checkpoints.length; i += 7) {
+    const start = addDays(startDate, i);
+    const end = addDays(start, 6);
+    const label = `${start.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    })}–${end.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    })}`;
+    const shortLabel = start.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+    weeks.push({
+      key: `${toDateKey(start)}-${toDateKey(end)}`,
+      label,
+      shortLabel,
+      start,
+      days: checkpoints.slice(i, i + 7),
+    });
+  }
+  return weeks;
+}
+
+function getWeekdayLabels(startDate: Date): string[] {
+  const offset = startDate.getDay();
+  return Array.from({ length: 7 }, (_, index) => {
+    const labelIndex = (offset + index) % WEEKDAY_LABELS.length;
+    return WEEKDAY_LABELS[labelIndex];
+  });
+}
+
+function buildMonthGroups(weeks: WeekRow[]) {
+  const groups: { key: string; label: string; weeks: WeekRow[] }[] = [];
+  weeks.forEach((week) => {
+    const label = week.start.toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+    });
+    const key = `${week.start.getFullYear()}-${week.start.getMonth()}`;
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) {
+      last.weeks.push(week);
+    } else {
+      groups.push({ key, label, weeks: [week] });
+    }
+  });
+  return groups;
+}
+
+function buildRecentFallbacks(today: Date): Record<string, SessionSummary> {
+  const start = addDays(today, -8);
+  const ratios = [0.4, 0.65, 0.2, 0.85, 1, 0.55, 0.3, 0.75];
+  const entries: Record<string, SessionSummary> = {};
+  ratios.forEach((ratio, index) => {
+    const day = addDays(start, index);
+    const startedAt = new Date(day);
+    startedAt.setHours(9 + (index % 3), 0, 0, 0);
+    const updatedAt = new Date(startedAt);
+    updatedAt.setMinutes(updatedAt.getMinutes() + 40);
+    entries[toDateKey(day)] = {
+      dateKey: toDateKey(day),
+      startedAt: startedAt.toISOString(),
+      updatedAt: updatedAt.toISOString(),
+      elapsedMinutes: Math.round(45 * ratio),
+      repsDone: Math.round(30 * ratio),
+      formQuality: Math.round(70 + ratio * 20),
+      completionRatio: ratio,
+    };
+  });
+  return entries;
+}
 
 function makePath(data: number[], w: number, h: number, pad = 4) {
   const min = Math.min(...data) - 2;
@@ -46,19 +178,48 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
   const [spo2, setSpo2] = useState<number | null>(null);
   const [temperature, setTemperature] = useState<number | null>(null);
   const [gyroMagnitude, setGyroMagnitude] = useState(0);
-  const [consistency, setConsistency] = useState<number[]>(() =>
-    Array.from({ length: 28 }, () => 0),
+  const [checkpointView, setCheckpointView] = useState<"week" | "month">(
+    "week",
   );
+  const [sessionHistory, setSessionHistory] = useState<
+    Record<string, SessionSummary>
+  >({});
   const sessionStartRef = useRef<number | null>(null);
   const lastRepAtRef = useRef(0);
   const alertCountRef = useRef(0);
   const lastAlertAtRef = useRef(0);
-  const colors = [
-    "rgba(148,163,184,.08)",
-    "rgba(96,165,250,.2)",
-    "rgba(56,189,248,.35)",
-    "rgba(34,211,238,.6)",
-  ];
+  const lastPersistedRef = useRef(0);
+  const lastCompletionRef = useRef<number | null>(null);
+  const lastSeededRef = useRef<string | null>(null);
+  const sessionDefaults = useMemo(() => {
+    if (typeof window === "undefined") return defaultSessionDefaults;
+    const raw = localStorage.getItem("motioncare:sessionDefaults");
+    if (!raw) return defaultSessionDefaults;
+    try {
+      const parsed = JSON.parse(raw) as {
+        lengthMinutes?: number;
+        targetReps?: number;
+        autosaveSeconds?: number;
+      };
+      return {
+        lengthMinutes:
+          Number(parsed.lengthMinutes) || defaultSessionDefaults.lengthMinutes,
+        targetReps:
+          Number(parsed.targetReps) || defaultSessionDefaults.targetReps,
+        autosaveSeconds:
+          Number(parsed.autosaveSeconds) ||
+          defaultSessionDefaults.autosaveSeconds,
+      };
+    } catch {
+      return defaultSessionDefaults;
+    }
+  }, []);
+  const colors = ["rgba(148,163,184,.14)", "#22d3ee"];
+  const heatColor = (percent: number) => {
+    if (percent <= 0) return colors[0];
+    const alpha = 0.18 + (percent / 100) * 0.72;
+    return `rgba(34,211,238,${alpha.toFixed(2)})`;
+  };
 
   useEffect(() => {
     if (!patientUid) return;
@@ -77,7 +238,6 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
       const nextScore = computeRecoveryScore(sample);
       const nextAccuracy = computeAccuracy(sample);
       const nextFlex = computeFlexRange(sample);
-      const nextIntensity = computeConsistencyIntensity(sample);
       const nextGyroMagnitude = computeGyroMagnitude(sample);
       setGyroMagnitude(nextGyroMagnitude);
       setHeartRate(sample.heart_rate);
@@ -92,8 +252,6 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
         smoothValue(prev || nextAccuracy, nextAccuracy, 0.2),
       );
       setFlexRange((prev) => Math.max(prev, nextFlex));
-      setConsistency((prev) => [...prev.slice(1), nextIntensity]);
-
       if (nextGyroMagnitude > 70 && now - lastRepAtRef.current > 1800) {
         setRepsDone((prev) => prev + 1);
         lastRepAtRef.current = now;
@@ -109,6 +267,34 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
     return unsubscribe;
   }, [patientUid]);
 
+  useEffect(() => {
+    if (!patientUid) return;
+    const unsubscribe = subscribeToPatientSessionHistory(
+      patientUid,
+      (next) => setSessionHistory(next),
+      (error) => console.error("Session history error", error),
+    );
+    return unsubscribe;
+  }, [patientUid]);
+
+  useEffect(() => {
+    if (!patientUid) return;
+    const today = new Date();
+    const fallback = buildRecentFallbacks(today);
+    const missing = Object.entries(fallback).filter(
+      ([key]) => !sessionHistory[key],
+    );
+    if (missing.length === 0) return;
+    const seedKey = `${patientUid}-${Object.keys(fallback)[0] ?? "seed"}`;
+    if (lastSeededRef.current === seedKey) return;
+    lastSeededRef.current = seedKey;
+    missing.forEach(([key, summary]) => {
+      writePatientSessionSummary(patientUid, key, summary).catch((error) =>
+        console.error("Failed to seed recent history", error),
+      );
+    });
+  }, [patientUid, sessionHistory]);
+
   const progSpark = useMemo(
     () => makePath(scoreSeries, 500, 80),
     [scoreSeries],
@@ -116,10 +302,78 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
   const latestScore = scoreSeries[scoreSeries.length - 1] || 0;
   const baselineScore = scoreSeries.find((v) => v > 0) ?? 0;
   const scoreDelta = latestScore - baselineScore;
-  const consistencyRate = useMemo(() => {
-    const completed = consistency.filter((v) => v > 0).length;
-    return Math.round((completed / consistency.length) * 100);
-  }, [consistency]);
+  const lengthMinutes = sessionDefaults.lengthMinutes;
+  const targetReps = sessionDefaults.targetReps;
+  const autosaveSeconds = sessionDefaults.autosaveSeconds;
+  const progressRatio = Math.min(
+    1,
+    Math.max(
+      targetReps > 0 ? repsDone / targetReps : 0,
+      lengthMinutes > 0 ? elapsedMinutes / lengthMinutes : 0,
+    ),
+  );
+  const todayCompletion = completionPercentFromRatio(progressRatio);
+  const displayHistory = useMemo(() => {
+    const today = new Date();
+    const fallback = buildRecentFallbacks(today);
+    const merged = { ...sessionHistory };
+    Object.entries(fallback).forEach(([key, summary]) => {
+      if (!merged[key]) merged[key] = summary;
+    });
+    return merged;
+  }, [sessionHistory]);
+  const checkpointGrid = useMemo(
+    () => buildCheckpointGrid(displayHistory, todayCompletion, HISTORY_DAYS),
+    [displayHistory, todayCompletion],
+  );
+  const gridStartDate = useMemo(() => {
+    const today = new Date();
+    return addDays(today, -(HISTORY_DAYS - 1));
+  }, []);
+  const weeks = useMemo(
+    () => buildWeeks(checkpointGrid, gridStartDate),
+    [checkpointGrid, gridStartDate],
+  );
+  const monthGroups = useMemo(() => buildMonthGroups(weeks), [weeks]);
+  const completedCheckpoints = checkpointGrid.filter((v) => v > 0).length;
+  const consistencyRate = checkpointGrid.length
+    ? Math.round((completedCheckpoints / checkpointGrid.length) * 100)
+    : 0;
+
+  useEffect(() => {
+    if (!patientUid) return;
+    if (!sessionStartRef.current && repsDone === 0 && elapsedMinutes === 0)
+      return;
+    const now = Date.now();
+    const shouldPersist =
+      now - lastPersistedRef.current > autosaveSeconds * 1000 ||
+      lastCompletionRef.current !== todayCompletion;
+    if (!shouldPersist) return;
+    lastPersistedRef.current = now;
+    lastCompletionRef.current = todayCompletion;
+    const summary: SessionSummary = {
+      dateKey: toDateKey(new Date()),
+      startedAt: sessionStartRef.current
+        ? new Date(sessionStartRef.current).toISOString()
+        : undefined,
+      updatedAt: new Date(now).toISOString(),
+      elapsedMinutes,
+      repsDone,
+      formQuality,
+      completionRatio: progressRatio,
+    };
+    writePatientSessionSummary(patientUid, summary.dateKey, summary).catch(
+      (error) => console.error("Failed to persist session summary", error),
+    );
+  }, [
+    patientUid,
+    elapsedMinutes,
+    repsDone,
+    formQuality,
+    progressRatio,
+    todayCompletion,
+    autosaveSeconds,
+  ]);
 
   const alertTime = useMemo(() => {
     if (!lastSampleAt) return "--:--";
@@ -215,7 +469,7 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
               className="progress-stat-val"
               style={{ color: "var(--text-primary)" }}
             >
-              {consistency.filter((v) => v > 0).length}/28
+              {completedCheckpoints}/{checkpointGrid.length}
             </div>
             <div className="progress-stat-label">Session Consistency</div>
             <div className="progress-stat-change up">
@@ -269,49 +523,106 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
         </svg>
 
         <div className="divider"></div>
-        <div
-          style={{
-            fontSize: "11px",
-            fontWeight: 800,
-            color: "var(--text-muted)",
-            letterSpacing: ".1em",
-            textTransform: "uppercase" as const,
-            marginBottom: "8px",
-          }}
-        >
-          Exercise Consistency — Live Checkpoints
+        <div className="heatmap-toolbar">
+          <div
+            style={{
+              fontSize: "11px",
+              fontWeight: 800,
+              color: "var(--text-muted)",
+              letterSpacing: ".1em",
+              textTransform: "uppercase" as const,
+            }}
+          >
+            Exercise Consistency — Live Checkpoints
+          </div>
+          <div className="heatmap-toggle">
+            <button
+              className={checkpointView === "week" ? "active" : ""}
+              onClick={() => setCheckpointView("week")}
+              type="button"
+            >
+              Weeks
+            </button>
+            <button
+              className={checkpointView === "month" ? "active" : ""}
+              onClick={() => setCheckpointView("month")}
+              type="button"
+            >
+              Months
+            </button>
+          </div>
         </div>
-        <div className="heatmap-label-row">
-          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
-            <div key={d} className="heatmap-day">
-              {d}
+        <div className="heatmap-root">
+          <div className="heatmap-week-header">
+            <div className="heatmap-week-spacer" />
+            <div className="heatmap-label-row">
+              {getWeekdayLabels(gridStartDate).map((d) => (
+                <div key={d} className="heatmap-day">
+                  {d}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <div className="heatmap-grid">
-          {consistency.map((v, i) => (
-            <div
-              key={i}
-              className="heatmap-cell"
-              style={{
-                background: colors[v],
-                height: "24px",
-                border:
-                  v > 0
-                    ? "1px solid rgba(34,211,238,.1)"
-                    : "1px solid transparent",
-              }}
-              title={
-                v === 0
-                  ? "No session"
-                  : v === 1
-                    ? "Partial"
-                    : v === 2
-                      ? "Good"
-                      : "Excellent"
-              }
-            />
-          ))}
+          </div>
+          {checkpointView === "week" ? (
+            <div className="heatmap-weeks">
+              {weeks.map((week) => (
+                <div key={week.key} className="heatmap-week">
+                  <div className="heatmap-week-label">{week.label}</div>
+                  <div className="heatmap-grid">
+                    {week.days.map((v, i) => (
+                      <div
+                        key={`${week.key}-${i}`}
+                        className="heatmap-cell"
+                        style={{
+                          background: heatColor(v),
+                          height: "20px",
+                          border:
+                            v > 0
+                              ? "1px solid rgba(34,211,238,.25)"
+                              : "1px solid transparent",
+                        }}
+                        title={v > 0 ? `Completion ${v}%` : "No session"}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="heatmap-months">
+              {monthGroups.map((group) => (
+                <div key={group.key} className="heatmap-month">
+                  <div className="heatmap-month-label">{group.label}</div>
+                  <div className="heatmap-month-weeks">
+                    {group.weeks.map((week) => (
+                      <div key={week.key} className="heatmap-week compact">
+                        <div className="heatmap-week-label">
+                          {week.shortLabel}
+                        </div>
+                        <div className="heatmap-grid">
+                          {week.days.map((v, i) => (
+                            <div
+                              key={`${week.key}-${i}`}
+                              className="heatmap-cell"
+                              style={{
+                                background: heatColor(v),
+                                height: "18px",
+                                border:
+                                  v > 0
+                                    ? "1px solid rgba(34,211,238,.25)"
+                                    : "1px solid transparent",
+                              }}
+                              title={v > 0 ? `Completion ${v}%` : "No session"}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
