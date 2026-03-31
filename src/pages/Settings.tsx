@@ -1,18 +1,68 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { collection, onSnapshot } from "firebase/firestore";
 import { useTheme } from "../ThemeContext";
 import { subscribeToAllPatientsLiveData } from "../services/realtimeDbService";
 import { vitalsRanges } from "../services/recoveryMetrics";
+import { bindDeviceToPatient, getDeviceBinding } from "../services/deviceBindingService";
+import { db } from "../firebase";
+import type { SessionUser } from "../types/auth";
 import type { LiveDataMap } from "../types/sensor";
 import packageJson from "../../package.json";
 
-export default function Settings() {
+type SettingsProps = {
+  session: SessionUser;
+};
+
+type PatientProfile = {
+  uid: string;
+  displayName?: string;
+};
+
+export default function Settings({ session }: SettingsProps) {
   const { theme, toggleTheme } = useTheme();
   const [liveData, setLiveData] = useState<LiveDataMap>({});
   const [lastSampleAt, setLastSampleAt] = useState("");
   const [sampleRate, setSampleRate] = useState(0);
   const [uptimeSeconds, setUptimeSeconds] = useState(0);
+  const [patients, setPatients] = useState<PatientProfile[]>([]);
+  const [deviceUid, setDeviceUid] = useState("");
+  const [selectedPatientUid, setSelectedPatientUid] = useState(session.uid);
+  const [currentBinding, setCurrentBinding] = useState<string | null>(null);
+  const [bindingLoading, setBindingLoading] = useState(false);
+  const [bindingError, setBindingError] = useState("");
+  const [bindingSuccess, setBindingSuccess] = useState("");
   const sessionStartRef = useRef(Date.now());
   const lastTimestampRef = useRef<string | null>(null);
+
+  const isDoctor = session.role === "doctor";
+
+  useEffect(() => {
+    if (!isDoctor) {
+      setPatients([{ uid: session.uid, displayName: session.displayName }]);
+      setSelectedPatientUid(session.uid);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(collection(db, "patients"), (snapshot) => {
+      const nextPatients = snapshot.docs
+        .map((docItem) => docItem.data() as PatientProfile)
+        .filter((item) => Boolean(item.uid));
+      setPatients(nextPatients);
+    });
+
+    return unsubscribe;
+  }, [isDoctor, session.displayName, session.uid]);
+
+  useEffect(() => {
+    if (!isDoctor) return;
+    if (selectedPatientUid) {
+      const exists = patients.some((patient) => patient.uid === selectedPatientUid);
+      if (exists) return;
+    }
+    if (patients[0]?.uid) {
+      setSelectedPatientUid(patients[0].uid);
+    }
+  }, [isDoctor, patients, selectedPatientUid]);
 
   useEffect(() => {
     const unsubscribe = subscribeToAllPatientsLiveData((incoming) => {
@@ -81,6 +131,60 @@ export default function Settings() {
     const mins = Math.floor((uptimeSeconds % 3600) / 60);
     return `${days}d ${hours}h ${mins}m`;
   }, [uptimeSeconds]);
+
+  const handleCheckBinding = async () => {
+    setBindingError("");
+    setBindingSuccess("");
+    const normalizedDeviceUid = deviceUid.trim();
+
+    if (!normalizedDeviceUid) {
+      setBindingError("Enter a device UID first.");
+      return;
+    }
+
+    setBindingLoading(true);
+    try {
+      const binding = await getDeviceBinding(normalizedDeviceUid);
+      setCurrentBinding(binding);
+      setBindingSuccess(
+        binding
+          ? `Device is currently mapped to patient UID: ${binding}`
+          : "No patient UID is currently mapped to this device.",
+      );
+    } catch (err) {
+      setBindingError((err as Error).message || "Failed to fetch device binding.");
+    } finally {
+      setBindingLoading(false);
+    }
+  };
+
+  const handleSaveBinding = async () => {
+    setBindingError("");
+    setBindingSuccess("");
+
+    const normalizedDeviceUid = deviceUid.trim();
+    if (!normalizedDeviceUid) {
+      setBindingError("Device UID is required.");
+      return;
+    }
+
+    const patientUid = isDoctor ? selectedPatientUid : session.uid;
+    if (!patientUid) {
+      setBindingError("Patient UID is required.");
+      return;
+    }
+
+    setBindingLoading(true);
+    try {
+      await bindDeviceToPatient(normalizedDeviceUid, patientUid, session.uid);
+      setCurrentBinding(patientUid);
+      setBindingSuccess(`Device ${normalizedDeviceUid} mapped to patient UID ${patientUid}.`);
+    } catch (err) {
+      setBindingError((err as Error).message || "Failed to save device binding.");
+    } finally {
+      setBindingLoading(false);
+    }
+  };
 
   const sessionDefaults = useMemo(() => {
     if (typeof window === "undefined") return null;
@@ -347,6 +451,117 @@ export default function Settings() {
           </div>
         </div>
       ))}
+
+      {/* Device Binding */}
+      <div className="section">
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">
+              <span style={{ fontSize: "18px" }}>🔗</span>
+              Device to Patient Binding
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gap: "12px", maxWidth: "760px" }}>
+            <div>
+              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em" }}>
+                Device UID
+              </div>
+              <input
+                value={deviceUid}
+                onChange={(e) => setDeviceUid(e.target.value)}
+                placeholder="Enter Firebase Auth UID of device"
+                style={{
+                  width: "100%",
+                  borderRadius: "10px",
+                  border: "1px solid var(--border)",
+                  background: "var(--surface-2)",
+                  color: "var(--text-primary)",
+                  padding: "11px 12px",
+                  fontFamily: "var(--mono)",
+                  fontSize: "13px",
+                }}
+              />
+            </div>
+
+            {isDoctor ? (
+              <div>
+                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em" }}>
+                  Patient UID
+                </div>
+                <select
+                  value={selectedPatientUid}
+                  onChange={(e) => setSelectedPatientUid(e.target.value)}
+                  style={{
+                    width: "100%",
+                    borderRadius: "10px",
+                    border: "1px solid var(--border)",
+                    background: "var(--surface-2)",
+                    color: "var(--text-primary)",
+                    padding: "11px 12px",
+                    fontSize: "13px",
+                  }}
+                >
+                  <option value="">Select patient</option>
+                  {patients.map((patient) => (
+                    <option key={patient.uid} value={patient.uid}>
+                      {(patient.displayName || "Unnamed patient") + " — " + patient.uid}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div style={{ fontSize: "13px", color: "var(--text-secondary)", background: "var(--surface-2)", border: "1px solid var(--border-light)", borderRadius: "10px", padding: "10px 12px" }}>
+                Binding target UID: <span style={{ fontFamily: "var(--mono)", fontWeight: 700 }}>{session.uid}</span>
+              </div>
+            )}
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={handleCheckBinding}
+                disabled={bindingLoading}
+                style={{
+                  borderRadius: "10px",
+                  border: "1px solid var(--border)",
+                  background: "var(--surface-2)",
+                  color: "var(--text-primary)",
+                  padding: "10px 14px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {bindingLoading ? "Checking..." : "Check Mapping"}
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveBinding}
+                disabled={bindingLoading}
+                style={{
+                  borderRadius: "10px",
+                  border: "1px solid rgba(52,211,153,.2)",
+                  background: "rgba(52,211,153,.12)",
+                  color: "var(--green)",
+                  padding: "10px 14px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {bindingLoading ? "Saving..." : "Save Mapping"}
+              </button>
+            </div>
+
+            {currentBinding ? (
+              <div style={{ fontSize: "13px", color: "var(--text-secondary)", fontFamily: "var(--mono)" }}>
+                Current mapped patient UID: {currentBinding}
+              </div>
+            ) : null}
+
+            {bindingError ? <div className="auth-error">{bindingError}</div> : null}
+            {bindingSuccess ? <div className="auth-success">{bindingSuccess}</div> : null}
+          </div>
+        </div>
+      </div>
 
       {/* System Info */}
       <div className="section">

@@ -10,7 +10,8 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
-import { getSessionProfileByUid, signOutUser } from "./services/authService";
+import { signOutUser } from "./services/authService";
+import { setActiveUid } from "./services/realtimeDbService";
 import TopNav from "./components/TopNav";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./pages/Dashboard";
@@ -24,8 +25,7 @@ import Login from "./pages/Login";
 import DoctorDashboard from "./pages/DoctorDashboard";
 import Profile from "./pages/Profile";
 import Onboarding from "./pages/Onboarding";
-import ChatPage from "./pages/ChatPage"; // ✅ ADDED
-import type { SessionUser } from "./types/auth";
+import type { SessionUser, UserRole } from "./types/auth";
 
 function AppShell({
   session,
@@ -75,7 +75,6 @@ function AppShell({
   return (
     <div className={`app-shell${sidebarOpen ? " sidebar-open" : ""}`}>
       <TopNav
-        uid={session.uid}
         isSidebarOpen={sidebarOpen}
         onMenuToggle={() => setSidebarOpen((open) => !open)}
         role={session.role}
@@ -87,20 +86,17 @@ function AppShell({
         onSearch={handleSearch}
         onProfile={() => navigate("/profile")}
       />
-
       <Sidebar
         role={session.role}
         open={sidebarOpen}
         onNavigate={() => setSidebarOpen(false)}
       />
-
       <button
         type="button"
         className={`sidebar-backdrop${sidebarOpen ? " visible" : ""}`}
         aria-label="Close navigation menu"
         onClick={() => setSidebarOpen(false)}
       />
-
       <main className="main">
         <Routes>
           <Route
@@ -116,43 +112,23 @@ function AppShell({
               )
             }
           />
-
           <Route
             path="/live"
             element={
               <LiveMonitoring role={session.role} patientUid={session.uid} />
             }
           />
-
           <Route path="/movement" element={<MovementAnalysis />} />
           <Route path="/insights" element={<AIInsights />} />
-
           <Route
             path="/patients"
             element={
               isDoctor ? <PatientHistory /> : <Navigate to="/" replace />
             }
           />
-
           <Route path="/reports" element={<Reports session={session} />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/settings" element={<Settings session={session} />} />
           <Route path="/profile" element={<Profile session={session} />} />
-
-          {/* ✅ CHAT ROUTE ADDED */}
-          <Route
-            path="/chat"
-            element={
-              <ChatPage
-                currentUser={{
-                  uid: session.uid,
-                  role: session.role,
-                  profileDocId: session.profileDocId,
-                }}
-              />
-            }
-          />
-
-          {/* ⚠️ MUST ALWAYS BE LAST */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
@@ -161,8 +137,9 @@ function AppShell({
 }
 
 function AppRouter() {
+  // undefined = still resolving auth state (show loading spinner)
   const [session, setSession] = useState<SessionUser | null | undefined>(
-    undefined
+    undefined,
   );
 
   useEffect(() => {
@@ -171,22 +148,36 @@ function AppRouter() {
         setSession(null);
         return;
       }
-
       try {
-        const sessionProfile = await getSessionProfileByUid(firebaseUser.uid);
-        if (!sessionProfile) {
+        const indexSnap = await getDoc(doc(db, "user_index", firebaseUser.uid));
+        if (!indexSnap.exists()) {
           setSession(null);
           return;
         }
 
-        const { role, displayName, profileDocId } = sessionProfile;
+        const indexData = indexSnap.data() as {
+          role: UserRole;
+          displayName: string;
+          docId: string;
+        };
+
+        const { role, displayName, docId: profileDocId } = indexData;
+
+        try {
+          await setActiveUid({
+            uid: firebaseUser.uid,
+            role,
+            displayName,
+            email: firebaseUser.email,
+          });
+        } catch (err) {
+          console.error("Realtime presence sync failed on auth restore", err);
+        }
 
         let needsOnboarding = false;
-
         if (role === "patient") {
           const profileSnap = await getDoc(doc(db, "patients", profileDocId));
-          needsOnboarding =
-            !(profileSnap.exists() && profileSnap.data()?.onboardedAt);
+          needsOnboarding = !(profileSnap.exists() && profileSnap.data()?.onboardedAt);
         }
 
         setSession({
@@ -200,7 +191,6 @@ function AppRouter() {
         setSession(null);
       }
     });
-
     return unsubscribe;
   }, []);
 
@@ -224,7 +214,14 @@ function AppRouter() {
   if (session === undefined) {
     return (
       <div className="auth-shell">
-        <div className="auth-panel card" style={{ textAlign: "center" }}>
+        <div
+          className="auth-panel card"
+          style={{
+            textAlign: "center",
+            color: "var(--text-muted)",
+            fontSize: "14px",
+          }}
+        >
           Loading MotionCare AI...
         </div>
       </div>
@@ -233,13 +230,19 @@ function AppRouter() {
 
   return (
     <Routes>
+      {/* Public login page */}
       <Route
         path="/login"
         element={
-          session ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />
+          session ? (
+            <Navigate to="/" replace />
+          ) : (
+            <Login onLogin={handleLogin} />
+          )
         }
       />
 
+      {/* Patient onboarding standalone full-screen flow */}
       <Route
         path="/onboarding"
         element={
@@ -256,6 +259,7 @@ function AppRouter() {
         }
       />
 
+      {/* Main authenticated app shell */}
       <Route
         path="/*"
         element={
