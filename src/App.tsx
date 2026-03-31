@@ -39,6 +39,7 @@ function AppShell({
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const navigate = useNavigate();
+  const isChatRoute = location.pathname === "/chat";
 
   const isDoctor = session.role === "doctor";
 
@@ -75,7 +76,9 @@ function AppShell({
   }, [sidebarOpen]);
 
   return (
-    <div className={`app-shell${sidebarOpen ? " sidebar-open" : ""}`}>
+    <div
+      className={`app-shell${sidebarOpen ? " sidebar-open" : ""}${isChatRoute ? " chat-route" : ""}`}
+    >
       <TopNav
         uid={session.uid}
         isSidebarOpen={sidebarOpen}
@@ -100,7 +103,7 @@ function AppShell({
         aria-label="Close navigation menu"
         onClick={() => setSidebarOpen(false)}
       />
-      <main className="main">
+      <main className={`main${isChatRoute ? " chat-main" : ""}`}>
         <Routes>
           <Route
             path="/"

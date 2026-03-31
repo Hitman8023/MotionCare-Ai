@@ -1,7 +1,17 @@
 import { useEffect, useState } from "react";
 import Chat from "../components/Chat";
+import ChatListItem, { type ChatListItemData } from "../components/ChatListItem";
 import { db } from "../firebase";
-import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+} from "firebase/firestore";
 import "../styles/chat.css";
 
 interface User {
@@ -10,15 +20,10 @@ interface User {
   profileDocId: string;
 }
 
-interface PatientInfo {
-  uid: string;
-  name: string;
-}
-
 const ChatPage = ({ currentUser }: { currentUser: User }) => {
   const [patientId, setPatientId] = useState<string | null>(null);
   const [doctorId, setDoctorId] = useState<string | null>(null);
-  const [patients, setPatients] = useState<PatientInfo[]>([]);
+  const [chats, setChats] = useState<ChatListItemData[]>([]);
   const [selectedPatientName, setSelectedPatientName] = useState<string>("");
 
   // 🔥 PATIENT FLOW
@@ -51,12 +56,50 @@ const ChatPage = ({ currentUser }: { currentUser: User }) => {
 
       const snapshot = await getDocs(q);
 
-      const patientList = snapshot.docs.map((doc) => ({
-        uid: doc.data().uid,
-        name: doc.data().displayName || "Unknown",
+      const patientList = snapshot.docs.map((patientDoc) => ({
+        uid: patientDoc.data().uid,
+        name: patientDoc.data().displayName || "Unknown",
       }));
 
-      setPatients(patientList);
+      const chatsWithPreview = await Promise.all(
+        patientList.map(async (patient) => {
+          let lastMessage = "No messages yet";
+          let timestamp: any = undefined;
+
+          try {
+            const latestMessageQuery = query(
+              collection(db, "chats", patient.uid, "messages"),
+              orderBy("timestamp", "desc"),
+              limit(1),
+            );
+            const latestSnapshot = await getDocs(latestMessageQuery);
+
+            if (!latestSnapshot.empty) {
+              const latestMessage = latestSnapshot.docs[0].data();
+              lastMessage = latestMessage.text || "No messages yet";
+              timestamp = latestMessage.timestamp;
+            }
+          } catch (err) {
+            console.error(`Failed to load preview for patient ${patient.uid}`, err);
+          }
+
+          return {
+            id: patient.uid,
+            name: patient.name,
+            lastMessage,
+            timestamp,
+            unreadCount: 0,
+          } as ChatListItemData;
+        }),
+      );
+
+      chatsWithPreview.sort((a, b) => {
+        const aTime = a.timestamp?.toDate?.()?.getTime?.() || 0;
+        const bTime = b.timestamp?.toDate?.()?.getTime?.() || 0;
+        return bTime - aTime;
+      });
+
+      setChats(chatsWithPreview);
       setDoctorId(currentUser.uid);
     };
 
@@ -74,12 +117,14 @@ const ChatPage = ({ currentUser }: { currentUser: User }) => {
     }
 
     return (
-      <Chat
-        patientId={patientId}
-        doctorId={doctorId}
-        currentUserId={currentUser.uid}
-        patientName="Your Doctor"
-      />
+      <div className="chat-page-fixed">
+        <Chat
+          patientId={patientId}
+          doctorId={doctorId}
+          currentUserId={currentUser.uid}
+          patientName="Your Doctor"
+        />
+      </div>
     );
   }
 
@@ -89,23 +134,22 @@ const ChatPage = ({ currentUser }: { currentUser: User }) => {
       {/* Patients Sidebar */}
       <div className="patients-sidebar">
         <div className="patients-header">
-          <h3>Patients ({patients.length})</h3>
+          <h3>Chats ({chats.length})</h3>
         </div>
         <div className="patients-list">
-          {patients.length === 0 ? (
+          {chats.length === 0 ? (
             <div className="patients-empty">No patients assigned yet</div>
           ) : (
-            patients.map((patient) => (
-              <div
-                key={patient.uid}
-                className={`patient-item ${patientId === patient.uid ? "active" : ""}`}
+            chats.map((chat) => (
+              <ChatListItem
+                key={chat.id}
+                chat={chat}
+                isActive={patientId === chat.id}
                 onClick={() => {
-                  setPatientId(patient.uid);
-                  setSelectedPatientName(patient.name);
+                  setPatientId(chat.id);
+                  setSelectedPatientName(chat.name);
                 }}
-              >
-                {patient.name}
-              </div>
+              />
             ))
           )}
         </div>

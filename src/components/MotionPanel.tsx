@@ -92,6 +92,24 @@ const EXERCISE_META: Record<ExerciseType, { label: string; cue: string; targetAn
     },
 };
 
+type ROMMetric = {
+    name: string;
+    exerciseType: ExerciseType;
+    targetAngle: number;
+    color: string;
+    unit: string;
+};
+
+// ROM metadata that maps exercises to their corresponding ROM metrics
+// Each metric shows the target and a reasonable range around it
+const ROM_METRICS: ROMMetric[] = [
+    { name: 'Wrist Flexion', exerciseType: 'wrist_flexion', targetAngle: -40, color: 'var(--teal)', unit: '°' },
+    { name: 'Wrist Extension', exerciseType: 'wrist_extension', targetAngle: 40, color: 'var(--blue)', unit: '°' },
+    { name: 'Wrist Rotation', exerciseType: 'wrist_rotation', targetAngle: 60, color: 'var(--purple)', unit: '°' },
+    { name: 'Radial Deviation', exerciseType: 'radial_deviation', targetAngle: 4, color: 'var(--green)', unit: '°' },
+    { name: 'Ulnar Deviation', exerciseType: 'ulnar_deviation', targetAngle: -4, color: 'var(--orange)', unit: '°' },
+];
+
 type DirectionLabel =
     | 'UP'
     | 'DOWN'
@@ -876,6 +894,76 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                         <div className="insight-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg></div>
                         <div><div className="insight-text">Heart rate slightly elevated at 78 BPM. Consider a 2-minute rest break.</div><div className="insight-time">12:43:20 PM</div></div>
                     </div>
+                </div>
+
+                {/* Joint Range of Motion */}
+                <div className="card">
+                    <div className="card-header">
+                        <div className="card-title">
+                            <div className="card-title-icon" style={{ background: 'rgba(34,211,238,.12)' }}>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#22d3ee" strokeWidth="2.2"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8" /><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" /></svg>
+                            </div>
+                            Joint Range of Motion
+                        </div>
+                        <span className="mini-tag tag-live">LIVE</span>
+                    </div>
+                    {ROM_METRICS.map((rom, idx) => {
+                        const isCurrentExercise = rom.exerciseType === selectedExercise;
+                        const targetAngle = rom.targetAngle;
+                        
+                        // Calculate range with ±5° tolerance around target
+                        const tolerance = 5;
+                        const targetMin = targetAngle - tolerance;
+                        const targetMax = targetAngle + tolerance;
+                        const targetRange = targetMax - targetMin;
+                        
+                        // Show current angle if this is selected exercise, otherwise show target
+                        const displayAngle = isCurrentExercise ? angle : targetAngle;
+                        const inRange = displayAngle >= targetMin && displayAngle <= targetMax;
+                        const percentage = Math.max(0, Math.min(100, ((displayAngle - targetMin) / targetRange) * 100));
+                        
+                        return (
+                            <div key={idx} style={{ marginBottom: idx < ROM_METRICS.length - 1 ? '16px' : '0' }}>
+                                <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    fontSize: '13px',
+                                    marginBottom: '6px',
+                                    fontWeight: isCurrentExercise ? 700 : 600,
+                                    opacity: isCurrentExercise ? 1 : 0.8,
+                                }}>
+                                    <span>{rom.name} {isCurrentExercise ? '◆' : ''}</span>
+                                    <span style={{
+                                        fontFamily: 'var(--mono)',
+                                        fontWeight: 700,
+                                        color: rom.color,
+                                    }}>
+                                        {fmtSigned(displayAngle, 0)}{rom.unit}
+                                        <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '12px' }}>
+                                            {' '}/{fmtSigned(targetAngle, 0)}{rom.unit}
+                                        </span>
+                                    </span>
+                                </div>
+                                <div style={{
+                                    height: '6px',
+                                    background: 'rgba(255,255,255,.05)',
+                                    borderRadius: '2px',
+                                    overflow: 'hidden',
+                                    border: `1px solid ${isCurrentExercise ? rom.color : 'rgba(255,255,255,.1)'}`,
+                                    opacity: isCurrentExercise ? 1 : 0.6,
+                                }}>
+                                    <div style={{
+                                        height: '100%',
+                                        width: `${percentage}%`,
+                                        background: inRange ? rom.color : 'var(--orange)',
+                                        transition: 'width 0.2s ease',
+                                        boxShadow: inRange ? `0 0 8px ${rom.color}80` : 'none',
+                                    }} />
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
 
