@@ -1,13 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   collection,
   doc,
   getDoc,
   onSnapshot,
-  query as buildQuery,
   updateDoc,
-  where,
 } from "firebase/firestore";
 import { subscribeToAllPatientsLiveData } from "../services/realtimeDbService";
 import {
@@ -77,6 +75,64 @@ type AssignedPatient = {
   reports: EmbeddedPatientReport[];
 };
 
+function mapAssignedPatientsFromSnapshot(
+  snapshot: { docs: Array<{ id: string; data: () => unknown }> },
+  session: SessionUser,
+): AssignedPatient[] {
+  const doctorKeys = new Set(
+    [session.uid, session.profileDocId].filter((value): value is string => Boolean(value)),
+  );
+
+  return snapshot.docs
+    .map((docItem) => {
+      const data = docItem.data() as PatientProfile & {
+        assignedDoctorId?: string;
+        doctor?: {
+          doctorId?: string;
+          uid?: string;
+          profileDocId?: string;
+        };
+      };
+
+      const assignedDoctorId = data.assignedDoctorId;
+      const nestedDoctorId = data.doctor?.doctorId;
+      const nestedDoctorUid = data.doctor?.uid;
+      const nestedDoctorProfileDocId = data.doctor?.profileDocId;
+
+      const isAssignedToDoctor =
+        (assignedDoctorId && doctorKeys.has(assignedDoctorId))
+        || (nestedDoctorId && doctorKeys.has(nestedDoctorId))
+        || (nestedDoctorUid && doctorKeys.has(nestedDoctorUid))
+        || (nestedDoctorProfileDocId && doctorKeys.has(nestedDoctorProfileDocId));
+
+      if (!isAssignedToDoctor) return null;
+
+      const uid = data.uid;
+      const fallbackUid = docItem.id;
+
+      const ageValue = data.basicInfo?.age ?? data.age;
+      const age = ageValue !== undefined && ageValue !== null && ageValue !== ""
+        ? String(ageValue)
+        : "--";
+
+      const injury =
+        data.incident?.type
+        || data.condition
+        || data.surgery
+        || "Not specified";
+
+      return {
+        patientDocId: docItem.id,
+        uid: uid || fallbackUid,
+        displayName: data.displayName || uid || fallbackUid || "Patient",
+        age,
+        injury,
+        reports: normalizeEmbeddedReports(data.reports),
+      } as AssignedPatient;
+    })
+    .filter((item): item is AssignedPatient => Boolean(item));
+}
+
 function toReportRowFromCache(input: {
   userId?: string;
   patientName?: string;
@@ -125,6 +181,7 @@ function normalizeEmbeddedReports(input: unknown): EmbeddedPatientReport[] {
 
 export default function Reports({ session }: { session: SessionUser }) {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [patients, setPatients] = useState<PatientProfile[]>([]);
   const [liveData, setLiveData] = useState<LiveDataMap>({});
   const [uploadedReports, setUploadedReports] = useState<ReportRow[]>([]);
@@ -136,6 +193,10 @@ export default function Reports({ session }: { session: SessionUser }) {
   const [reportName, setReportName] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadMessage, setUploadMessage] = useState("");
+  const [patientFilter, setPatientFilter] = useState<"all" | "recent" | "pending">("all");
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [openDoctorMenuForReportId, setOpenDoctorMenuForReportId] = useState<string>("");
+  const patientFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const isPatient = session.role === "patient";
   const isDoctor = session.role === "doctor";
@@ -249,48 +310,16 @@ export default function Reports({ session }: { session: SessionUser }) {
       return;
     }
 
-    const patientsQuery = buildQuery(
-      collection(db, "patients"),
-      where("doctor.doctorId", "==", session.profileDocId),
-    );
-
     const unsubscribe = onSnapshot(
-      patientsQuery,
+      collection(db, "patients"),
       (snapshot) => {
-        const nextPatients = snapshot.docs
-          .map((docItem) => {
-            const data = docItem.data() as PatientProfile;
-            const uid = data.uid;
-            if (!uid) return null;
-
-            const ageValue = data.basicInfo?.age ?? data.age;
-            const age = ageValue !== undefined && ageValue !== null && ageValue !== ""
-              ? String(ageValue)
-              : "--";
-
-            const injury =
-              data.incident?.type
-              || data.condition
-              || data.surgery
-              || "Not specified";
-
-            return {
-              patientDocId: docItem.id,
-              uid,
-              displayName: data.displayName || data.uid || "Patient",
-              age,
-              injury,
-              reports: normalizeEmbeddedReports(data.reports),
-            } as AssignedPatient;
-          })
-          .filter((item): item is AssignedPatient => Boolean(item));
-
-        setAssignedPatients(nextPatients);
-        setSelectedPatientUid((current) => {
-          if (!current) return current;
-          const stillExists = nextPatients.some((p) => p.uid === current);
-          return stillExists ? current : "";
-        });
+        const nextPatients = mapAssignedPatientsFromSnapshot(snapshot, session);
+      setAssignedPatients(nextPatients);
+      setSelectedPatientUid((current) => {
+        if (!current) return current;
+        const stillExists = nextPatients.some((p) => p.uid === current);
+        return stillExists ? current : "";
+      });
       },
       () => {
         setUploadMessage("Unable to load your assigned patients right now.");
@@ -298,7 +327,7 @@ export default function Reports({ session }: { session: SessionUser }) {
     );
 
     return unsubscribe;
-  }, [isDoctor, session.profileDocId]);
+  }, [isDoctor, session]);
 
   useEffect(() => {
     if (!isDoctor) return;
@@ -380,8 +409,8 @@ export default function Reports({ session }: { session: SessionUser }) {
       if (!selectedPatientUid) return [];
       return uploadedReports.filter((row) => row.patientUid === selectedPatientUid);
     }
-    if (!isPatient) return generatedReports;
-    return [...uploadedReports, ...generatedReports];
+    if (isPatient) return uploadedReports;
+    return generatedReports;
   }, [
     generatedReports,
     isDoctor,
@@ -447,6 +476,24 @@ export default function Reports({ session }: { session: SessionUser }) {
     }
 
     setSelectedFile(file);
+    if (!reportName.trim()) {
+      setReportName(file.name.replace(/\.[^/.]+$/, ""));
+    }
+    setUploadMessage(`Selected: ${file.name}`);
+  };
+
+  const handleDroppedFile = (file: File) => {
+    const validation = validateMedicalReportFile(file);
+    if (!validation.valid) {
+      setSelectedFile(null);
+      setUploadMessage(validation.error);
+      return;
+    }
+
+    setSelectedFile(file);
+    if (!reportName.trim()) {
+      setReportName(file.name.replace(/\.[^/.]+$/, ""));
+    }
     setUploadMessage(`Selected: ${file.name}`);
   };
 
@@ -456,11 +503,9 @@ export default function Reports({ session }: { session: SessionUser }) {
       return;
     }
 
-    const normalizedReportName = reportName.trim();
-    if (!normalizedReportName) {
-      setUploadMessage("Please enter a report name before uploading.");
-      return;
-    }
+    const normalizedReportName = reportName.trim()
+      || selectedFile.name.replace(/\.[^/.]+$/, "")
+      || "Health Report";
 
     try {
       setUploading(true);
@@ -619,6 +664,582 @@ export default function Reports({ session }: { session: SessionUser }) {
       setUploadMessage("Failed to remove this report from list.");
     }
   };
+
+  const makeFriendlyReportName = (report: ReportRow): string => {
+    const normalized = (report.title || "").trim() || report.fileName || "Health Report";
+    return normalized
+      .replace(/\.[^/.]+$/, "")
+      .replace(/[-_]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+
+  const getReportKind = (report: ReportRow): "pdf" | "image" | "other" => {
+    const fileName = (report.fileName || "").toLowerCase();
+    const mime = (report.mimeType || "").toLowerCase();
+    if (mime.includes("pdf") || fileName.endsWith(".pdf")) return "pdf";
+    if (mime.startsWith("image/") || /\.(png|jpg|jpeg|webp)$/i.test(fileName)) return "image";
+    return "other";
+  };
+
+  const nowMs = Date.now();
+  const patientReports = filteredReports
+    .map((report) => {
+      const parsedDate = Date.parse(report.date);
+      const isRecent = Number.isFinite(parsedDate)
+        ? nowMs - parsedDate <= 30 * 24 * 60 * 60 * 1000
+        : false;
+      const status = report.status.toLowerCase().includes("pending")
+        ? "Pending Review"
+        : "Ready";
+
+      return {
+        ...report,
+        friendlyName: makeFriendlyReportName(report),
+        friendlyStatus: status,
+        isRecent,
+      };
+    })
+    .filter((report) => {
+      if (patientFilter === "all") return true;
+      if (patientFilter === "recent") return report.isRecent;
+      return report.friendlyStatus === "Pending Review";
+    });
+
+  const toDoctorStatus = (report: ReportRow): "Reviewed" | "Pending Review" | "Needs Attention" => {
+    if (report.status.toLowerCase().includes("reviewed")) return "Reviewed";
+    const parsed = Date.parse(report.date);
+    if (Number.isFinite(parsed) && Date.now() - parsed > 1000 * 60 * 60 * 24 * 7) {
+      return "Needs Attention";
+    }
+    return "Pending Review";
+  };
+
+  const doctorReportCards = filteredReports.map((report) => ({
+    ...report,
+    workflowStatus: toDoctorStatus(report),
+  }));
+
+  const getPatientLastReportSummary = (patient: AssignedPatient) => {
+    const latest = [...patient.reports]
+      .map((item) => ({
+        ...item,
+        uploadedAtMs: item.uploadedAt ? new Date(item.uploadedAt).getTime() : 0,
+      }))
+      .sort((a, b) => b.uploadedAtMs - a.uploadedAtMs)[0];
+
+    if (!latest) {
+      return {
+        lastReportDate: "No reports yet",
+        lastReportStatus: "Pending Review" as "Reviewed" | "Pending Review" | "Needs Attention",
+      };
+    }
+
+    const status = (latest.reviewStatus || "").toLowerCase().includes("reviewed")
+      ? "Reviewed"
+      : latest.uploadedAtMs > 0 && Date.now() - latest.uploadedAtMs > 1000 * 60 * 60 * 24 * 7
+        ? "Needs Attention"
+        : "Pending Review";
+
+    const lastReportDate = latest.uploadedAtMs > 0
+      ? new Date(latest.uploadedAtMs).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })
+      : "Unknown";
+
+    return {
+      lastReportDate,
+      lastReportStatus: status,
+    };
+  };
+
+  if (isPatient) {
+    return (
+      <div className="pb-8 patient-reports-root">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 rounded-3xl border border-slate-800 bg-slate-950/70 p-4 shadow-[0_24px_50px_rgba(2,6,23,0.55)] backdrop-blur sm:p-6 lg:p-8 patient-reports-shell">
+          <header className="space-y-2 patient-reports-header">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-100 sm:text-3xl">
+              My Health Reports
+            </h1>
+            <p className="max-w-2xl text-sm text-slate-400 sm:text-base">
+              Keep all your medical records in one safe place so you can easily share updates with your care team.
+            </p>
+          </header>
+
+          <section className="rounded-2xl border border-cyan-500/20 bg-slate-900/70 p-4 shadow-[0_14px_35px_rgba(8,47,73,0.35)] backdrop-blur sm:p-5 patient-upload-card">
+          <div className="mb-3">
+            <h2 className="text-lg font-semibold text-slate-100">Upload New Report</h2>
+            <p className="mt-1 text-sm text-slate-400">
+              Upload your prescriptions, test results, or reports
+            </p>
+          </div>
+
+          <div className="grid gap-3">
+            <label className="text-sm font-medium text-slate-200" htmlFor="patient-report-name">
+              Report Name
+            </label>
+            <input
+              id="patient-report-name"
+              type="text"
+              value={reportName}
+              onChange={(event) => {
+                setReportName(event.target.value);
+                if (uploadMessage) setUploadMessage("");
+              }}
+              placeholder="Example: Blood Test - March 2026"
+              disabled={uploading}
+              className="h-11 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none disabled:opacity-70"
+            />
+
+            <div
+              role="button"
+              tabIndex={0}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setIsDraggingFile(true);
+              }}
+              onDragLeave={(event) => {
+                event.preventDefault();
+                setIsDraggingFile(false);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                setIsDraggingFile(false);
+                const file = event.dataTransfer.files?.[0];
+                if (file) handleDroppedFile(file);
+              }}
+              onClick={() => patientFileInputRef.current?.click()}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  patientFileInputRef.current?.click();
+                }
+              }}
+              className={`rounded-2xl border-2 border-dashed p-4 text-center transition ${
+                isDraggingFile
+                  ? "border-cyan-300 bg-cyan-400/10"
+                  : "border-slate-700 bg-slate-950/70 hover:border-cyan-600/70 hover:bg-slate-900"
+              } patient-upload-dropzone`}
+            >
+              <p className="text-sm font-medium text-slate-200">
+                Drag and drop a file here, or click to choose a file
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                PDF, JPG, PNG up to 10MB
+              </p>
+              {selectedFile ? (
+                <p className="mt-2 truncate text-xs font-medium text-cyan-300">
+                  Selected file: {selectedFile.name}
+                </p>
+              ) : null}
+            </div>
+
+            <input
+              ref={patientFileInputRef}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,image/*"
+              disabled={uploading}
+              onChange={handleFileSelected}
+              className="hidden"
+            />
+
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleFileUpload}
+                disabled={uploading || !selectedFile}
+                className="inline-flex h-10 items-center justify-center rounded-xl px-5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                style={{
+                  background: uploading || !selectedFile
+                    ? "rgb(51 65 85)"
+                    : "linear-gradient(135deg, rgb(16 185 129), rgb(5 150 105))",
+                  color: uploading || !selectedFile ? "rgb(148 163 184)" : "rgb(236 253 245)",
+                }}
+              >
+                {uploading ? "Uploading..." : "Upload Report"}
+              </button>
+              <p className="text-xs text-slate-500">Your report stays private to you and your care team.</p>
+            </div>
+
+            {uploadMessage ? (
+              <div
+                className={`rounded-xl border px-4 py-3 text-sm ${
+                  uploadMessage.toLowerCase().includes("success")
+                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                    : uploadMessage.toLowerCase().includes("uploading")
+                      ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-300"
+                      : "border-slate-700 bg-slate-900 text-slate-300"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {uploadMessage.toLowerCase().includes("uploading") ? (
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-cyan-300 border-t-transparent" />
+                  ) : uploadMessage.toLowerCase().includes("success") ? (
+                    <span className="text-emerald-300">✓</span>
+                  ) : null}
+                  <span>{uploadMessage}</span>
+                </div>
+              </div>
+            ) : null}
+          </div>
+          </section>
+
+          <section className="flex flex-col gap-4 patient-reports-list-section">
+            <div className="flex flex-wrap items-center gap-2 patient-report-filters">
+              {[
+                { key: "all", label: "All" },
+                { key: "recent", label: "Recent" },
+                { key: "pending", label: "Pending" },
+              ].map((filter) => {
+                const selected = patientFilter === filter.key;
+                return (
+                  <button
+                    key={filter.key}
+                    type="button"
+                    onClick={() => setPatientFilter(filter.key as "all" | "recent" | "pending")}
+                      className={`rounded-full px-4 py-2 text-sm font-medium transition duration-200 ${
+                      selected
+                          ? "bg-cyan-300 text-slate-950 shadow-[0_0_0_1px_rgba(34,211,238,0.7)]"
+                          : "border border-slate-700 bg-slate-900 text-slate-300 hover:-translate-y-0.5 hover:border-slate-500"
+                    }`}
+                  >
+                    {filter.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {patientReports.length ? (
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {patientReports.map((report) => (
+                  <article
+                    key={`${report.reportId || report.fileUrl || report.friendlyName}-${report.date}`}
+                    className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 shadow-[0_10px_26px_rgba(2,6,23,0.45)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_16px_36px_rgba(2,6,23,0.6)] patient-report-card"
+                  >
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-1 flex items-center gap-2">
+                          {getReportKind(report) === "pdf" ? (
+                            <span className="rounded-md bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-rose-300">PDF</span>
+                          ) : getReportKind(report) === "image" ? (
+                            <span className="rounded-md bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-blue-300">IMG</span>
+                          ) : (
+                            <span className="rounded-md bg-slate-600/20 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300">DOC</span>
+                          )}
+                          <h3 className="truncate text-base font-semibold text-slate-100" title={report.friendlyName}>
+                            {report.friendlyName}
+                          </h3>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-400">Uploaded on {report.date}</p>
+                        {report.fileName ? (
+                          <p className="mt-1 truncate text-[11px] text-slate-500" title={report.fileName}>{report.fileName}</p>
+                        ) : null}
+                      </div>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          report.friendlyStatus === "Pending Review"
+                            ? "bg-amber-400/15 text-amber-300"
+                            : "bg-emerald-500/20 text-emerald-300"
+                        }`}
+                      >
+                        {report.friendlyStatus}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleViewReport(report);
+                        }}
+                        disabled={!report.fileUrl}
+                        className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-700 px-3 text-sm font-medium text-slate-200 transition hover:border-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        View
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleExportReport(report)}
+                        disabled={!report.fileUrl}
+                        className="inline-flex h-9 items-center justify-center rounded-lg bg-cyan-500/20 px-3 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                      >
+                        Download
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/60 p-10 text-center patient-report-empty-state">
+                <div className="mb-4 rounded-full border border-slate-700 bg-slate-800/80 p-3 text-cyan-300">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="12" y1="11" x2="12" y2="17" />
+                    <line x1="9" y1="14" x2="15" y2="14" />
+                  </svg>
+                </div>
+                <p className="text-base font-medium text-slate-200">
+                  No reports yet. Upload your first report to get started
+                </p>
+                <p className="mt-2 text-sm text-slate-500">
+                  Add your first file and it will appear here for quick access.
+                </p>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+    );
+  }
+
+  if (isDoctor) {
+    const selectedSummary = selectedDoctorPatient
+      ? getPatientLastReportSummary(selectedDoctorPatient)
+      : null;
+
+    return (
+      <div className="space-y-6 pb-8">
+        <div className="page-header">
+          <div className="page-title">Doctor Reports Workflow</div>
+          <div className="page-subtitle">Fast access to patient reports and review actions</div>
+        </div>
+
+        <section className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 shadow-[0_12px_30px_rgba(2,6,23,0.45)]">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-slate-300">Assigned Patients</h2>
+            <span className="text-xs text-slate-400">{filteredAssignedPatients.length} patients</span>
+          </div>
+
+          <div className="relative mb-3">
+            <svg
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              value={doctorPatientSearch}
+              onChange={(event) => setDoctorPatientSearch(event.target.value)}
+              placeholder="Search patients by name, age, or injury"
+              className="h-10 w-full rounded-xl border border-slate-700 bg-slate-950 pl-9 pr-3 text-sm text-slate-200 placeholder:text-slate-500 transition duration-200 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+            />
+          </div>
+
+          <div className="grid gap-2">
+            {filteredAssignedPatients.map((patient) => {
+              const summary = getPatientLastReportSummary(patient);
+              const isSelected = selectedPatientUid === patient.uid;
+              return (
+                <button
+                  key={patient.uid}
+                  type="button"
+                  onClick={() => setSelectedPatientUid(patient.uid)}
+                  className={`grid w-full grid-cols-[1fr_auto] items-center gap-3 rounded-xl border p-3 text-left transition duration-200 ${
+                    isSelected
+                      ? "border-cyan-400/80 bg-gradient-to-r from-cyan-500/15 to-blue-500/10 shadow-[0_0_0_1px_rgba(34,211,238,0.35),0_10px_24px_rgba(14,116,144,0.2)]"
+                      : "border-slate-700 bg-slate-950/60 hover:-translate-y-0.5 hover:border-slate-500 hover:shadow-[0_8px_18px_rgba(2,6,23,0.45)]"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-100">{patient.displayName}</p>
+                    <p className="mt-0.5 text-xs text-slate-400">Age {patient.age} • {patient.injury}</p>
+                    <p className="mt-1 text-xs text-slate-500">Last report: {summary.lastReportDate}</p>
+                  </div>
+                  <span
+                    className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                      summary.lastReportStatus === "Reviewed"
+                        ? "bg-emerald-500/20 text-emerald-300"
+                        : summary.lastReportStatus === "Needs Attention"
+                          ? "bg-rose-500/20 text-rose-300"
+                          : "bg-amber-500/20 text-amber-300"
+                    }`}
+                  >
+                    {summary.lastReportStatus}
+                  </span>
+                </button>
+              );
+            })}
+            {!filteredAssignedPatients.length ? (
+              <p className="text-xs text-slate-400">No assigned patients found.</p>
+            ) : null}
+          </div>
+        </section>
+
+        <div className="h-px bg-gradient-to-r from-transparent via-slate-700 to-transparent" />
+
+        {selectedDoctorPatient ? (
+          <section className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 shadow-[0_10px_28px_rgba(2,6,23,0.45)]">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-100">{selectedDoctorPatient.displayName}</h3>
+                <p className="text-sm text-slate-400">Age {selectedDoctorPatient.age} • Injury: {selectedDoctorPatient.injury}</p>
+                <p className="text-xs text-slate-500">Last activity: {selectedSummary?.lastReportDate || "No activity yet"}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigate("/live")}
+                  className="rounded-lg border border-cyan-400/60 bg-cyan-400 px-3 py-2 text-xs font-semibold text-slate-950 transition duration-200 hover:-translate-y-0.5 hover:bg-cyan-300"
+                >
+                  Start session
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate("/chat")}
+                  className="rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-3 py-2 text-xs font-semibold text-cyan-200 transition duration-200 hover:bg-cyan-500/25"
+                >
+                  Chat with patient
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/doctor/${selectedDoctorPatient.uid}`)}
+                  className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 transition duration-200 hover:border-slate-500"
+                >
+                  View profile
+                </button>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {selectedDoctorPatient ? (
+          <section className="space-y-3 border-t border-slate-700/80 pt-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-slate-300">Submitted Reports</h3>
+              <button
+                type="button"
+                onClick={() => setSelectedPatientUid("")}
+                className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300 transition duration-200 hover:border-slate-500"
+              >
+                Back to patients
+              </button>
+            </div>
+
+            <div className="grid gap-3">
+              {doctorReportCards.map((r, index) => {
+                const menuKey = r.reportId || `${r.fileUrl || "row"}_${index}`;
+                return (
+                  <article
+                    key={menuKey}
+                    className={`relative rounded-2xl border p-4 shadow-[0_10px_22px_rgba(2,6,23,0.4)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_16px_32px_rgba(2,6,23,0.55)] ${
+                      r.workflowStatus === "Needs Attention"
+                        ? "border-rose-500/55 bg-gradient-to-br from-rose-500/10 to-slate-900/80 hover:shadow-[0_0_0_1px_rgba(244,63,94,0.35),0_16px_32px_rgba(2,6,23,0.55)]"
+                        : r.workflowStatus === "Pending Review"
+                          ? "border-amber-500/40 bg-gradient-to-br from-amber-500/10 to-slate-900/80 hover:border-amber-400/60"
+                          : "border-emerald-500/35 bg-gradient-to-br from-emerald-500/8 to-slate-900/80 hover:border-emerald-400/55"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-100">{r.title}</p>
+                        <p className="mt-1 text-xs text-slate-400">{r.date} • {r.pages} pages • {r.type}</p>
+                      </div>
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                          r.workflowStatus === "Reviewed"
+                            ? "border border-emerald-500/40 bg-emerald-500/20 text-emerald-300"
+                            : r.workflowStatus === "Needs Attention"
+                              ? "border border-rose-500/45 bg-rose-500/20 text-rose-300"
+                              : "border border-amber-500/45 bg-amber-500/20 text-amber-300"
+                        }`}
+                      >
+                        {r.workflowStatus}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleViewReport(r);
+                        }}
+                        disabled={!r.fileUrl}
+                        className="rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-semibold text-slate-950 transition duration-200 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                      >
+                        View Report
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleExportReport(r)}
+                        disabled={!r.fileUrl}
+                        className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 transition duration-200 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Export
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenDoctorMenuForReportId((current) => (current === menuKey ? "" : menuKey))
+                        }
+                        className="ml-auto rounded-lg border border-slate-700 px-2.5 py-1.5 text-slate-300 transition duration-200 hover:border-slate-500"
+                        aria-label="Open report actions"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                          <circle cx="5" cy="12" r="2" />
+                          <circle cx="12" cy="12" r="2" />
+                          <circle cx="19" cy="12" r="2" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {openDoctorMenuForReportId === menuKey ? (
+                      <div className="absolute right-4 top-[72px] z-20 min-w-[180px] rounded-xl border border-slate-700 bg-slate-950 p-1 shadow-[0_12px_24px_rgba(2,6,23,0.65)]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleMarkReviewed(r);
+                            setOpenDoctorMenuForReportId("");
+                          }}
+                          className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 hover:bg-slate-800"
+                        >
+                          Mark as reviewed
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void handleRemoveReportRecord(r);
+                            setOpenDoctorMenuForReportId("");
+                          }}
+                          className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-rose-300 hover:bg-rose-500/10"
+                        >
+                          Remove report
+                        </button>
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
+
+              {!doctorReportCards.length ? (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-slate-700 bg-slate-900/60 p-8 text-center">
+                  <div className="mb-3 rounded-full border border-slate-700 bg-slate-800/80 p-3 text-slate-300">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                  </div>
+                  <p className="text-sm font-semibold text-slate-200">No reports yet</p>
+                  <p className="mt-1 text-xs text-slate-400">This patient has not uploaded reports yet.</p>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        ) : (
+          <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-6 text-sm text-slate-400">
+            Select a patient to review reports.
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <>
