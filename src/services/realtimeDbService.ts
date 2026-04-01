@@ -29,7 +29,22 @@ function normalizeSensorSample(raw: unknown): SensorSample | null {
   if (!raw || typeof raw !== "object") return null;
 
   const data = raw as Record<string, unknown>;
-  const timestampRaw = pickFirst(data, ["timestamp", "ts", "time"]);
+  const motion =
+    data.motion && typeof data.motion === "object"
+      ? (data.motion as Record<string, unknown>)
+      : {};
+  const health =
+    data.health && typeof data.health === "object"
+      ? (data.health as Record<string, unknown>)
+      : {};
+
+  // Supports both legacy flat payloads and split payloads under motion/health.
+  const merged = { ...data, ...motion, ...health };
+
+  const timestampRaw =
+    pickFirst(motion, ["timestamp", "ts", "time"]) ??
+    pickFirst(health, ["timestamp", "ts", "time"]) ??
+    pickFirst(data, ["timestamp", "ts", "time"]);
   const timestamp =
     typeof timestampRaw === "string" && timestampRaw.trim().length > 0
       ? timestampRaw
@@ -37,19 +52,21 @@ function normalizeSensorSample(raw: unknown): SensorSample | null {
 
   return {
     timestamp,
-    temperature: toNumber(pickFirst(data, ["lm35_temp", "lm35", "lm_35"])),
+    temperature: toNumber(
+      pickFirst(merged, ["lm35_temp", "temperature", "lm35", "lm_35"]),
+    ),
     heart_rate: toNumber(
-      pickFirst(data, ["heart_rate", "heartRate", "hr", "bpm"]),
+      pickFirst(merged, ["heart_rate", "heartRate", "hr", "bpm"]),
     ),
     spo2: toNumber(
-      pickFirst(data, ["spo2", "SpO2", "oxygen", "oxygen_saturation"]),
+      pickFirst(merged, ["spo2", "SpO2", "oxygen", "oxygen_saturation"]),
     ),
-    acc_x: toNumber(pickFirst(data, ["acc_x", "accX", "ax"])),
-    acc_y: toNumber(pickFirst(data, ["acc_y", "accY", "ay"])),
-    acc_z: toNumber(pickFirst(data, ["acc_z", "accZ", "az"])),
-    gyro_x: toNumber(pickFirst(data, ["gyro_x", "gyroX", "gx"])),
-    gyro_y: toNumber(pickFirst(data, ["gyro_y", "gyroY", "gy"])),
-    gyro_z: toNumber(pickFirst(data, ["gyro_z", "gyroZ", "gz"])),
+    acc_x: toNumber(pickFirst(merged, ["acc_x", "accX", "ax"])),
+    acc_y: toNumber(pickFirst(merged, ["acc_y", "accY", "ay"])),
+    acc_z: toNumber(pickFirst(merged, ["acc_z", "accZ", "az"])),
+    gyro_x: toNumber(pickFirst(merged, ["gyro_x", "gyroX", "gx"])),
+    gyro_y: toNumber(pickFirst(merged, ["gyro_y", "gyroY", "gy"])),
+    gyro_z: toNumber(pickFirst(merged, ["gyro_z", "gyroZ", "gz"])),
   };
 }
 
