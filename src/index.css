@@ -7269,3 +7269,59 @@ svg.sparkline {
 [data-theme="light"] .ob-blob-2 {
   opacity: 0.15;
 }
+
+/* Patient reports page styling */
+.patient-reports-root {
+  width: 100%;
+}
+
+.patient-reports-shell {
+  position: relative;
+  overflow: hidden;
+  background-image:
+    radial-gradient(circle at 12% 0%, rgba(34, 211, 238, 0.09), transparent 44%),
+    radial-gradient(circle at 92% 80%, rgba(56, 189, 248, 0.08), transparent 42%);
+}
+
+.patient-upload-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.patient-upload-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(120deg, rgba(14, 165, 233, 0.08), transparent 32%, transparent 68%, rgba(14, 165, 233, 0.06));
+}
+
+.patient-upload-dropzone {
+  min-height: 130px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.patient-reports-list-section {
+  min-height: 180px;
+}
+
+.patient-report-card {
+  backdrop-filter: blur(8px);
+}
+
+.patient-report-empty-state {
+  min-height: 220px;
+}
+
+@media (max-width: 768px) {
+  .patient-upload-dropzone {
+    min-height: 116px;
+  }
+
+  .patient-report-empty-state {
+    min-height: 190px;
+    padding: 28px 18px;
+  }
+}
