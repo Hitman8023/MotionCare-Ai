@@ -2,9 +2,21 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { auth } from '../firebase';
 import type { ExerciseType } from '../services/exerciseDetection';
 import {
+    computeAccuracy,
+    computeFlexRange,
+    computeRecoveryScore,
+    detectAlertCount,
+    formatTimestampLabel,
+} from '../services/recoveryMetrics';
+import {
+    subscribeToPatientLiveData,
+    subscribeToPatientSessionHistory,
+} from '../services/realtimeDbService';
+import {
     askRecoveryAssistantWithGemini,
     type RecoveryAssistantTurn,
 } from '../services/geminiRecoveryAssistant';
+import type { SensorSample, SessionSummary } from '../types/sensor';
 
 type RecoveryChatMessage = RecoveryAssistantTurn & {
     id: string;
@@ -20,7 +32,61 @@ type WeeklyExerciseSummary = {
     bestExerciseReps: number;
 };
 
+type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snacks' | 'beverages';
+
+type MealLog = {
+    selectedItems: string[];
+    outsideItems: string;
+    includesJunk: boolean;
+};
+
+type DailyDietLog = {
+    dateKey: string;
+    meals: Record<MealType, MealLog>;
+};
+
+type WeeklyDietSummary = {
+    todayScore: number;
+    weeklyScore: number;
+    todayCompletionRate: number;
+    loggedDays: number;
+    junkMeals: number;
+    outsideMeals: number;
+};
+
+type LiveVitalsSummary = {
+    hasLiveData: boolean;
+    timestampLabel: string;
+    heartRate: number | null;
+    spo2: number | null;
+    temperature: number | null;
+    recoveryScore: number;
+    movementAccuracy: number;
+    flexRange: number;
+    alertCount: number;
+    trendDelta: number;
+};
+
+type SessionHistorySummary = {
+    totalSessions: number;
+    completedSessions: number;
+    avgCompletionRate: number;
+    avgFormQuality: number;
+    totalReps: number;
+    lastSessionLabel: string;
+};
+
+type DietDaySummary = {
+    touched: boolean;
+    score: number;
+    completionRate: number;
+    junkMeals: number;
+    outsideMeals: number;
+};
+
 const DAILY_REP_STORAGE_KEY_PREFIX = 'motioncare:daily-reps:v1';
+const DIET_LOG_STORAGE_KEY_PREFIX = 'motioncare:diet-log:v1';
+const MAX_SAMPLE_HISTORY = 120;
 
 const EXERCISE_ORDER: ExerciseType[] = [
     'wrist_flexion',
@@ -29,6 +95,8 @@ const EXERCISE_ORDER: ExerciseType[] = [
     'radial_deviation',
     'ulnar_deviation',
 ];
+
+const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'dinner', 'snacks', 'beverages'];
 
 const CHAT_QUICK_PROMPTS = [
     'Give me 3 practical tips to improve my recovery score this week.',
@@ -51,13 +119,16 @@ export default function RecoveryAssistant() {
     const [chatMessages, setChatMessages] = useState<RecoveryChatMessage[]>(() => [
         createChatMessage(
             'model',
-            'Hi, I am your MotionCare recovery assistant. Ask rehab-only questions about movement, exercise adherence, diet, and improving recovery outcomes.',
+            'Hi, I am your MotionCare recovery assistant. I use your vitals, exercise, diet, and session stats to personalize answers. Ask rehab-only questions about movement, adherence, and safer recovery outcomes.',
         ),
     ]);
     const [chatInput, setChatInput] = useState('');
     const [chatSending, setChatSending] = useState(false);
     const [chatError, setChatError] = useState<string | null>(null);
     const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+    const [latestSample, setLatestSample] = useState<SensorSample | null>(null);
+    const [sampleHistory, setSampleHistory] = useState<SensorSample[]>([]);
+    const [sessionHistory, setSessionHistory] = useState<Record<string, SessionSummary>>({});
     const threadEndRef = useRef<HTMLDivElement | null>(null);
 
     const patientUid = auth.currentUser?.uid ?? 'local';
@@ -71,20 +142,96 @@ export default function RecoveryAssistant() {
         return () => window.clearInterval(interval);
     }, []);
 
+    useEffect(() => {
+        if (!patientUid || patientUid === 'local') {
+            setLatestSample(null);
+            setSampleHistory([]);
+            return;
+        }
+
+        const unsubscribe = subscribeToPatientLiveData(
+            patientUid,
+            (sample) => {
+                if (!sample) return;
+
+                setLatestSample(sample);
+                setSampleHistory((prev) => {
+                    const next = [...prev, sample];
+                    return next.length > MAX_SAMPLE_HISTORY
+                        ? next.slice(next.length - MAX_SAMPLE_HISTORY)
+                        : next;
+                });
+            },
+            (error) => {
+                console.error('Live vitals stream error', error);
+            },
+        );
+
+        return unsubscribe;
+    }, [patientUid]);
+
+    useEffect(() => {
+        if (!patientUid || patientUid === 'local') {
+            setSessionHistory({});
+            return;
+        }
+
+        const unsubscribe = subscribeToPatientSessionHistory(
+            patientUid,
+            (next) => {
+                setSessionHistory(next);
+            },
+            (error) => {
+                console.error('Session history stream error', error);
+            },
+        );
+
+        return unsubscribe;
+    }, [patientUid]);
+
     const summary = useMemo(
         () => summarizeWeeklyExercise(patientUid, nowDateKey),
         [patientUid, nowDateKey, statsTick],
     );
 
+    const vitalsSummary = useMemo(
+        () => summarizeLiveVitals(latestSample, sampleHistory),
+        [latestSample, sampleHistory],
+    );
+
+    const sessionSummary = useMemo(
+        () => summarizeSessionHistory(sessionHistory),
+        [sessionHistory],
+    );
+
+    const dietSummary = useMemo(
+        () => summarizeWeeklyDiet(patientUid, nowDateKey),
+        [patientUid, nowDateKey, statsTick],
+    );
+
+    const exerciseAdherenceScore = useMemo(
+        () => clamp(roundInt((summary.activeDays / 7) * 100), 0, 100),
+        [summary.activeDays],
+    );
+
     const chatContextSummary = useMemo(
-        () => [
-            `Today reps: ${summary.todayTotal}`,
-            `Weekly reps: ${summary.weeklyTotal}`,
-            `Active days this week: ${summary.activeDays}`,
-            `Skipped days this week: ${summary.skippedDays}`,
-            `Top exercise: ${EXERCISE_LABELS[summary.bestExercise]} (${summary.bestExerciseReps} reps)`,
-        ].join('\n'),
-        [summary],
+        () =>
+            buildChatContextSummary(
+                nowDateKey,
+                summary,
+                exerciseAdherenceScore,
+                vitalsSummary,
+                sessionSummary,
+                dietSummary,
+            ),
+        [
+            nowDateKey,
+            summary,
+            exerciseAdherenceScore,
+            vitalsSummary,
+            sessionSummary,
+            dietSummary,
+        ],
     );
 
     useEffect(() => {
@@ -356,6 +503,322 @@ function readDailyRepMap(uid: string, dateKey: string): Partial<Record<ExerciseT
     } catch {
         return {};
     }
+}
+
+function summarizeLiveVitals(
+    latestSample: SensorSample | null,
+    sampleHistory: SensorSample[],
+): LiveVitalsSummary {
+    if (!latestSample) {
+        return {
+            hasLiveData: false,
+            timestampLabel: 'unavailable',
+            heartRate: null,
+            spo2: null,
+            temperature: null,
+            recoveryScore: 0,
+            movementAccuracy: 0,
+            flexRange: 0,
+            alertCount: 0,
+            trendDelta: 0,
+        };
+    }
+
+    const scoreSeries = sampleHistory.map((sample) => computeRecoveryScore(sample));
+    const recentWindow = scoreSeries.slice(Math.max(0, scoreSeries.length - 20));
+    const baselineWindow = scoreSeries.length >= 20 ? scoreSeries.slice(0, 20) : scoreSeries;
+
+    const recentAverage = recentWindow.length
+        ? average(recentWindow)
+        : computeRecoveryScore(latestSample);
+    const baselineAverage = baselineWindow.length ? average(baselineWindow) : recentAverage;
+
+    return {
+        hasLiveData: true,
+        timestampLabel: formatTimestampLabel(latestSample.timestamp),
+        heartRate: roundInt(latestSample.heart_rate),
+        spo2: roundInt(latestSample.spo2),
+        temperature: roundToOne(latestSample.temperature),
+        recoveryScore: clamp(roundInt(recentAverage), 0, 100),
+        movementAccuracy: clamp(computeAccuracy(latestSample), 0, 100),
+        flexRange: clamp(computeFlexRange(latestSample), 0, 180),
+        alertCount: Math.max(0, detectAlertCount(latestSample)),
+        trendDelta: roundToOne(recentAverage - baselineAverage),
+    };
+}
+
+function summarizeSessionHistory(history: Record<string, SessionSummary>): SessionHistorySummary {
+    const entries = Object.values(history);
+    if (!entries.length) {
+        return {
+            totalSessions: 0,
+            completedSessions: 0,
+            avgCompletionRate: 0,
+            avgFormQuality: 0,
+            totalReps: 0,
+            lastSessionLabel: 'unavailable',
+        };
+    }
+
+    const completionRates = entries.map((entry) => clamp(entry.completionRatio * 100, 0, 100));
+    const formQualityScores = entries.map((entry) => clamp(entry.formQuality, 0, 100));
+    const totalReps = entries.reduce(
+        (sum, entry) => sum + Math.max(0, roundInt(entry.repsDone)),
+        0,
+    );
+    const completedSessions = entries.filter((entry) => entry.completionRatio > 0).length;
+
+    const lastSessionTimestamp = entries
+        .map((entry) => entry.updatedAt || entry.startedAt || entry.dateKey)
+        .sort((a, b) => toTimestampMs(b) - toTimestampMs(a))[0];
+
+    return {
+        totalSessions: entries.length,
+        completedSessions,
+        avgCompletionRate: roundInt(average(completionRates)),
+        avgFormQuality: roundInt(average(formQualityScores)),
+        totalReps,
+        lastSessionLabel: formatTimestampLabel(lastSessionTimestamp),
+    };
+}
+
+function summarizeWeeklyDiet(uid: string, todayDateKey: string): WeeklyDietSummary {
+    if (typeof window === 'undefined') {
+        return {
+            todayScore: 0,
+            weeklyScore: 0,
+            todayCompletionRate: 0,
+            loggedDays: 0,
+            junkMeals: 0,
+            outsideMeals: 0,
+        };
+    }
+
+    const dayKeys = getPreviousDateKeys(todayDateKey, 7);
+    let scoreSum = 0;
+    let loggedDays = 0;
+    let junkMeals = 0;
+    let outsideMeals = 0;
+    let todayScore = 0;
+    let todayCompletionRate = 0;
+
+    dayKeys.forEach((dateKey, index) => {
+        const dayLog = readDietLog(uid, dateKey);
+        const daySummary = summarizeDietDay(dayLog);
+
+        if (index === 0) {
+            todayScore = daySummary.score;
+            todayCompletionRate = daySummary.completionRate;
+        }
+
+        junkMeals += daySummary.junkMeals;
+        outsideMeals += daySummary.outsideMeals;
+
+        if (daySummary.touched) {
+            scoreSum += daySummary.score;
+            loggedDays += 1;
+        }
+    });
+
+    return {
+        todayScore,
+        weeklyScore: loggedDays > 0 ? clamp(roundInt(scoreSum / loggedDays), 0, 100) : 0,
+        todayCompletionRate,
+        loggedDays,
+        junkMeals,
+        outsideMeals,
+    };
+}
+
+function summarizeDietDay(log: DailyDietLog): DietDaySummary {
+    let selectedCount = 0;
+    let plannedCount = 0;
+    let junkMeals = 0;
+    let outsideMeals = 0;
+
+    for (const mealType of MEAL_ORDER) {
+        const meal = log.meals[mealType];
+        selectedCount += meal.selectedItems.length;
+        plannedCount += 3;
+
+        if (meal.includesJunk) {
+            junkMeals += 1;
+        }
+
+        if (meal.outsideItems.trim().length > 0) {
+            outsideMeals += 1;
+        }
+    }
+
+    const completionRate = plannedCount > 0
+        ? roundInt((selectedCount / plannedCount) * 100)
+        : 0;
+    const touched = selectedCount > 0 || junkMeals > 0 || outsideMeals > 0;
+    const score = clamp(
+        roundInt(
+            completionRate * 0.72 +
+                (junkMeals === 0 ? 28 : Math.max(0, 28 - junkMeals * 10)) -
+                outsideMeals * 2,
+        ),
+        0,
+        100,
+    );
+
+    return {
+        touched,
+        score,
+        completionRate,
+        junkMeals,
+        outsideMeals,
+    };
+}
+
+function readDietLog(uid: string, dateKey: string): DailyDietLog {
+    if (typeof window === 'undefined') {
+        return createEmptyDietLog(dateKey);
+    }
+
+    const key = `${DIET_LOG_STORAGE_KEY_PREFIX}:${uid}:${dateKey}`;
+    const fallbackKey = `${DIET_LOG_STORAGE_KEY_PREFIX}:local:${dateKey}`;
+    const raw = window.localStorage.getItem(key) ?? window.localStorage.getItem(fallbackKey);
+    if (!raw) {
+        return createEmptyDietLog(dateKey);
+    }
+
+    try {
+        const parsed = JSON.parse(raw) as { meals?: Record<string, unknown> };
+        const base = createEmptyDietLog(dateKey);
+
+        for (const mealType of MEAL_ORDER) {
+            base.meals[mealType] = coerceMealLog(parsed.meals?.[mealType]);
+        }
+
+        return base;
+    } catch {
+        return createEmptyDietLog(dateKey);
+    }
+}
+
+function createEmptyDietLog(dateKey: string): DailyDietLog {
+    return {
+        dateKey,
+        meals: {
+            breakfast: { selectedItems: [], outsideItems: '', includesJunk: false },
+            lunch: { selectedItems: [], outsideItems: '', includesJunk: false },
+            dinner: { selectedItems: [], outsideItems: '', includesJunk: false },
+            snacks: { selectedItems: [], outsideItems: '', includesJunk: false },
+            beverages: { selectedItems: [], outsideItems: '', includesJunk: false },
+        },
+    };
+}
+
+function coerceMealLog(raw: unknown): MealLog {
+    if (!raw || typeof raw !== 'object') {
+        return { selectedItems: [], outsideItems: '', includesJunk: false };
+    }
+
+    const next = raw as { selectedItems?: unknown; outsideItems?: unknown; includesJunk?: unknown };
+    const selectedItems = Array.isArray(next.selectedItems)
+        ? next.selectedItems
+            .filter((item): item is string => typeof item === 'string')
+            .map((item) => item.trim())
+            .filter(Boolean)
+        : [];
+
+    return {
+        selectedItems,
+        outsideItems: typeof next.outsideItems === 'string' ? next.outsideItems : '',
+        includesJunk: Boolean(next.includesJunk),
+    };
+}
+
+function buildChatContextSummary(
+    dateKey: string,
+    exerciseSummary: WeeklyExerciseSummary,
+    exerciseAdherenceScore: number,
+    vitalsSummary: LiveVitalsSummary,
+    sessionSummary: SessionHistorySummary,
+    dietSummary: WeeklyDietSummary,
+): string {
+    const vitalsLines = vitalsSummary.hasLiveData
+        ? [
+            `Latest vitals timestamp: ${vitalsSummary.timestampLabel}`,
+            `Heart rate: ${vitalsSummary.heartRate} bpm`,
+            `SpO2: ${vitalsSummary.spo2}%`,
+            `Temperature: ${vitalsSummary.temperature} C`,
+            `Recovery score: ${vitalsSummary.recoveryScore}%`,
+            `Movement accuracy: ${vitalsSummary.movementAccuracy}%`,
+            `Flex range: ${vitalsSummary.flexRange} degrees`,
+            `Current vitals alerts: ${vitalsSummary.alertCount}`,
+            `Recovery trend delta from baseline: ${formatSigned(vitalsSummary.trendDelta)}%`,
+        ]
+        : [
+            'Latest vitals timestamp: unavailable',
+            'Heart rate: unavailable',
+            'SpO2: unavailable',
+            'Temperature: unavailable',
+            'Recovery score: unavailable',
+            'Movement accuracy: unavailable',
+            'Flex range: unavailable',
+            'Current vitals alerts: unavailable',
+            'Recovery trend delta from baseline: unavailable',
+        ];
+
+    return [
+        `Date: ${dateKey}`,
+        ...vitalsLines,
+        `Today reps: ${exerciseSummary.todayTotal}`,
+        `Weekly reps: ${exerciseSummary.weeklyTotal}`,
+        `Exercise adherence score: ${exerciseAdherenceScore}%`,
+        `Active days this week: ${exerciseSummary.activeDays}`,
+        `Skipped days this week: ${exerciseSummary.skippedDays}`,
+        `Top exercise: ${EXERCISE_LABELS[exerciseSummary.bestExercise]} (${exerciseSummary.bestExerciseReps} reps)`,
+        `Diet today score: ${dietSummary.todayScore}%`,
+        `Diet completion today: ${dietSummary.todayCompletionRate}%`,
+        `Diet weekly score: ${dietSummary.weeklyScore}%`,
+        `Diet logged days this week: ${dietSummary.loggedDays}`,
+        `Junk meals this week: ${dietSummary.junkMeals}`,
+        `Outside-plan meals this week: ${dietSummary.outsideMeals}`,
+        `Session records: ${sessionSummary.totalSessions}`,
+        `Completed sessions: ${sessionSummary.completedSessions}`,
+        `Average session completion: ${sessionSummary.avgCompletionRate}%`,
+        `Average session form quality: ${sessionSummary.avgFormQuality}%`,
+        `Total rehab reps from session history: ${sessionSummary.totalReps}`,
+        `Last session update: ${sessionSummary.lastSessionLabel}`,
+        'Use these patient stats directly in recommendations. If a stat is unavailable, say unavailable instead of guessing.',
+    ].join('\n');
+}
+
+function toTimestampMs(value: string): number {
+    const date = new Date(value);
+    const time = date.getTime();
+    return Number.isFinite(time) ? time : 0;
+}
+
+function average(values: number[]): number {
+    if (values.length === 0) return 0;
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function roundInt(value: number): number {
+    if (!Number.isFinite(value)) return 0;
+    return Math.round(value);
+}
+
+function roundToOne(value: number): number {
+    if (!Number.isFinite(value)) return 0;
+    return Math.round(value * 10) / 10;
+}
+
+function formatSigned(value: number): string {
+    if (!Number.isFinite(value)) return '0';
+    if (value > 0) return `+${roundToOne(value)}`;
+    if (value < 0) return `${roundToOne(value)}`;
+    return '0';
+}
+
+function clamp(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value));
 }
 
 function createChatMessage(role: 'user' | 'model', text: string): RecoveryChatMessage {
