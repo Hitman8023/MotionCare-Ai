@@ -86,7 +86,7 @@ export default function MovementAnalysis() {
     const joints: JointMetric[] = [
         { name: 'Wrist Flexion', current: angle, target: -40, unit: 'deg' },
         { name: 'Wrist Extension', current: 28, target: 40, unit: 'deg' },
-        { name: 'Wrist Rotation', current: 65, target: 60, unit: 'deg' },
+        { name: 'Front Shoulder Raise', current: 11, target: 12, unit: 'deg' },
         { name: 'Radial Deviation', current: 15, target: 4, unit: 'deg' },
         { name: 'Ulnar Deviation', current: -22, target: -4, unit: 'deg' },
     ];

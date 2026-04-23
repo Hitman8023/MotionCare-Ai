@@ -116,7 +116,7 @@ type ROMMetric = {
 const ROM_METRICS: ROMMetric[] = [
     { name: 'Wrist Flexion', exerciseType: 'wrist_flexion', targetAngle: -40, color: 'var(--teal)', unit: '°' },
     { name: 'Wrist Extension', exerciseType: 'wrist_extension', targetAngle: 40, color: 'var(--blue)', unit: '°' },
-    { name: 'Wrist Rotation', exerciseType: 'wrist_rotation', targetAngle: 60, color: 'var(--purple)', unit: '°' },
+    { name: 'Front Shoulder Raise', exerciseType: 'front_shoulder_raise', targetAngle: SHOULDER_TARGET_ANGLE, color: 'var(--purple)', unit: '°' },
     { name: 'Radial Deviation', exerciseType: 'radial_deviation', targetAngle: 4, color: 'var(--green)', unit: '°' },
     { name: 'Ulnar Deviation', exerciseType: 'ulnar_deviation', targetAngle: -4, color: 'var(--orange)', unit: '°' },
 ];

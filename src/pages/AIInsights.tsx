@@ -103,10 +103,50 @@ type DynamicMetrics = {
     delayDays: number;
 };
 
+type ForecastSeriesPoint = {
+    dateKey: string;
+    recoveryScore: number;
+    vitalScore: number;
+    exerciseScore: number;
+    dietScore: number;
+    sessionLoad: number;
+    signalStrength: number;
+};
+
+type ForecastWindow = {
+    minWeek: number;
+    maxWeek: number;
+    confidence: number;
+    delayDays: number;
+};
+
+type FittedArxModel = {
+    coefficients: number[];
+    mae: number;
+};
+
+type WeightedTrainingRow = {
+    x: number[];
+    y: number;
+    weight: number;
+};
+
+type DailyVitalsAggregate = {
+    dateKey: string;
+    sampleCount: number;
+    sumRecoveryScore: number;
+    avgRecoveryScore: number;
+    lastRecoveryScore: number;
+};
+
 const DAILY_REP_STORAGE_KEY_PREFIX = 'motioncare:daily-reps:v1';
 const DIET_LOG_STORAGE_KEY_PREFIX = 'motioncare:diet-log:v1';
+const DAILY_VITALS_STORAGE_KEY_PREFIX = 'motioncare:daily-vitals:v1';
 const MAX_SAMPLE_HISTORY = 120;
 const MIN_DAILY_REP_TARGET = 15;
+const FORECAST_LOOKBACK_DAYS = 28;
+const FORECAST_HORIZON_DAYS = 84;
+const FORECAST_TARGET_RECOVERY_SCORE = 88;
 
 const EXERCISE_ORDER: ExerciseType[] = [
     'wrist_flexion',
@@ -219,6 +259,7 @@ export default function AIInsights() {
 
         const unsubscribe = subscribeToPatientLiveData(patientUid, (sample) => {
             if (!sample) return;
+            recordDailyVitalsSample(patientUid, sample);
             setLatestSample(sample);
             setSampleHistory((prev) => {
                 const next = [...prev, sample];
@@ -258,8 +299,17 @@ export default function AIInsights() {
     );
 
     const dynamicMetrics = useMemo(
-        () => buildDynamicMetrics(latestSample, sampleHistory, exerciseStats, dietSummary),
-        [latestSample, sampleHistory, exerciseStats, dietSummary],
+        () =>
+            buildDynamicMetrics(
+                latestSample,
+                sampleHistory,
+                exerciseStats,
+                dietSummary,
+                storageUid,
+                currentDateKey,
+                dietLog,
+            ),
+        [latestSample, sampleHistory, exerciseStats, dietSummary, storageUid, currentDateKey, dietLog],
     );
 
     const modelAlignment = useMemo(() => {
@@ -1098,6 +1148,9 @@ function buildDynamicMetrics(
     sampleHistory: SensorSample[],
     exerciseStats: ExerciseWeeklyStats,
     dietSummary: WeeklyDietSummary,
+    storageUid: string,
+    currentDateKey: string,
+    dietLog: DailyDietLog,
 ): DynamicMetrics {
     const scoreSeries = sampleHistory.map((sample) => computeRecoveryScore(sample));
     const recentScore = scoreSeries.length
@@ -1110,7 +1163,7 @@ function buildDynamicMetrics(
         ? average(scoreSeries.slice(0, 20))
         : recentScore;
 
-    const trendDelta = roundToOne(recentScore - baselineScore);
+    const sessionTrendDelta = roundToOne(recentScore - baselineScore);
 
     const movementAccuracy = latestSample
         ? computeAccuracy(latestSample)
@@ -1119,21 +1172,257 @@ function buildDynamicMetrics(
     const flexRange = latestSample ? computeFlexRange(latestSample) : 18;
     const alertCount = latestSample ? detectAlertCount(latestSample) : 0;
 
-    const consistencyScore = scoreSeries.length > 6
+    const forecastSeries = buildForecastTimeSeries(
+        storageUid,
+        currentDateKey,
+        dietLog,
+        recentScore,
+        exerciseStats,
+        dietSummary,
+    );
+
+    const historicalTrendDelta = computeSeriesTrendDelta(forecastSeries);
+    const trendDelta = roundToOne(sessionTrendDelta * 0.45 + historicalTrendDelta * 0.55);
+
+    const intraSessionConsistency = scoreSeries.length > 6
         ? clamp(roundInt(100 - standardDeviation(scoreSeries) * 1.8), 30, 100)
         : 72;
+    const interDayConsistency = forecastSeries.length > 6
+        ? clamp(
+            roundInt(100 - standardDeviation(forecastSeries.map((point) => point.recoveryScore)) * 1.5),
+            35,
+            100,
+        )
+        : 72;
+    const consistencyScore = clamp(
+        roundInt(intraSessionConsistency * 0.45 + interDayConsistency * 0.55),
+        30,
+        100,
+    );
 
     const readinessScore = clamp(
         roundInt(
-            recentScore * 0.45 +
-                exerciseStats.adherenceScore * 0.35 +
-                dietSummary.weeklyScore * 0.2 -
+            recentScore * 0.42 +
+                exerciseStats.adherenceScore * 0.3 +
+                dietSummary.weeklyScore * 0.18 +
+                consistencyScore * 0.1 +
+                Math.max(0, trendDelta) * 0.6 -
                 alertCount * 5,
         ),
         25,
         99,
     );
 
+    const forecastWindow = estimateSystemForecastFromSeries(
+        forecastSeries,
+        recentScore,
+        trendDelta,
+        alertCount,
+        exerciseStats,
+        dietSummary,
+    );
+
+    return {
+        recoveryScore: clamp(roundInt(recentScore), 0, 100),
+        movementAccuracy,
+        flexRange,
+        alertCount,
+        trendDelta,
+        consistencyScore,
+        readinessScore,
+        systemMinWeek: forecastWindow.minWeek,
+        systemMaxWeek: forecastWindow.maxWeek,
+        systemConfidence: forecastWindow.confidence,
+        delayDays: forecastWindow.delayDays,
+    };
+}
+
+function buildForecastTimeSeries(
+    storageUid: string,
+    currentDateKey: string,
+    todayDietLog: DailyDietLog,
+    todayRecoveryScore: number,
+    exerciseStats: ExerciseWeeklyStats,
+    dietSummary: WeeklyDietSummary,
+): ForecastSeriesPoint[] {
+    const series: ForecastSeriesPoint[] = [];
+    const defaultExerciseScore = clamp(roundInt(exerciseStats.adherenceScore * 0.9), 30, 90);
+    const defaultDietScore = clamp(roundInt(dietSummary.weeklyScore * 0.9), 30, 90);
+
+    for (let daysAgo = FORECAST_LOOKBACK_DAYS - 1; daysAgo >= 0; daysAgo -= 1) {
+        const dateKey = getDateKeyDaysAgo(daysAgo);
+        const rawRepMap =
+            typeof window === 'undefined'
+                ? null
+                : window.localStorage.getItem(getDailyRepStorageKey(storageUid, dateKey));
+        const repMap = parseRepMap(rawRepMap);
+        const repsTotal = sumExerciseReps(repMap);
+
+        const dayDietLog = dateKey === currentDateKey
+            ? todayDietLog
+            : readDietLog(storageUid, dateKey);
+        const dayDietSummary = summarizeDietDay(dayDietLog);
+        const dailyVitals = readDailyVitalsAggregate(storageUid, dateKey);
+        const hasVitalSignal = dailyVitals !== null && dailyVitals.sampleCount > 0;
+        const hasExerciseSignal = repsTotal > 0;
+        const hasDietSignal = dayDietSummary.touched;
+        const hasSignal = hasVitalSignal || hasExerciseSignal || hasDietSignal || daysAgo === 0;
+
+        const exerciseScore = hasExerciseSignal
+            ? clamp(roundInt((repsTotal / MIN_DAILY_REP_TARGET) * 100), 0, 100)
+            : defaultExerciseScore;
+        const dietScore = hasDietSignal ? dayDietSummary.score : defaultDietScore;
+
+        const sessionLoad = hasExerciseSignal
+            ? clamp(roundToOne(repsTotal / MIN_DAILY_REP_TARGET), 0, 1.8)
+            : clamp(roundToOne(exerciseScore / 100), 0.1, 1.1);
+
+        const inferredVital = daysAgo === 0
+            ? clamp(roundInt(todayRecoveryScore), 25, 99)
+            : clamp(roundInt(48 + exerciseScore * 0.26 + dietScore * 0.23), 30, 96);
+
+        const vitalScore = hasVitalSignal && dailyVitals
+            ? clamp(roundInt(dailyVitals.avgRecoveryScore), 25, 99)
+            : inferredVital;
+
+        const vitalSignalStrength = hasVitalSignal && dailyVitals
+            ? clamp(dailyVitals.sampleCount / 40, 0.35, 1)
+            : daysAgo === 0
+              ? 0.65
+              : 0.25;
+        const exerciseSignalStrength = hasExerciseSignal ? 1 : 0.45;
+        const dietSignalStrength = hasDietSignal ? 1 : 0.5;
+        const signalStrength = clamp(
+            roundToOne(
+                vitalSignalStrength * 0.5 +
+                    exerciseSignalStrength * 0.3 +
+                    dietSignalStrength * 0.2,
+            ),
+            0.2,
+            1,
+        );
+
+        const recoveryScoreRaw = hasSignal
+            ? hasVitalSignal
+              ? vitalScore * 0.6 + exerciseScore * 0.24 + dietScore * 0.16
+              : vitalScore * 0.48 + exerciseScore * 0.32 + dietScore * 0.2
+            : inferredVital * 0.5 + defaultExerciseScore * 0.3 + defaultDietScore * 0.2;
+
+        const recoveryScore = clamp(roundInt(recoveryScoreRaw), 25, 99);
+
+        series.push({
+            dateKey,
+            recoveryScore,
+            vitalScore,
+            exerciseScore,
+            dietScore,
+            sessionLoad,
+            signalStrength,
+        });
+    }
+
+    return series;
+}
+
+function estimateSystemForecastFromSeries(
+    series: ForecastSeriesPoint[],
+    recentScore: number,
+    trendDelta: number,
+    alertCount: number,
+    exerciseStats: ExerciseWeeklyStats,
+    dietSummary: WeeklyDietSummary,
+): ForecastWindow {
+    const model = fitArxModel(series);
+    if (!model) {
+        return estimateSystemForecastHeuristic(
+            recentScore,
+            trendDelta,
+            alertCount,
+            exerciseStats,
+            dietSummary,
+        );
+    }
+
+    const targetRecovery = FORECAST_TARGET_RECOVERY_SCORE / 100;
+    const projectedPath = forecastRecoveryPath(series, model.coefficients, FORECAST_HORIZON_DAYS);
+    const projectedDaysToTarget = estimateDaysToReachTarget(projectedPath, targetRecovery);
+
+    const idealPath = forecastRecoveryPath(series, model.coefficients, FORECAST_HORIZON_DAYS, {
+        exerciseScore: 95,
+        dietScore: 92,
+        sessionLoad: 1.1,
+    });
+    const idealDaysToTarget = estimateDaysToReachTarget(idealPath, targetRecovery);
+
+    const signalQuality = clamp(average(series.map((point) => point.signalStrength)), 0.2, 1);
+    const seriesVolatility = standardDeviation(series.map((point) => point.recoveryScore));
+    const volatilityPenalty = clamp(seriesVolatility / 18, 0, 1);
+
+    const compliancePenaltyDays = roundInt(
+        Math.max(0, 75 - exerciseStats.adherenceScore) * 0.22 +
+        Math.max(0, 75 - dietSummary.weeklyScore) * 0.18,
+    );
+    const stabilityPenaltyDays = roundInt(volatilityPenalty * 10);
+
+    const delayDays = clamp(
+        roundInt(
+            Math.max(0, projectedDaysToTarget - idealDaysToTarget) +
+                compliancePenaltyDays +
+                stabilityPenaltyDays,
+        ),
+        0,
+        120,
+    );
+
+    const midWeek = clamp(
+        roundToOne(8 + (projectedDaysToTarget + alertCount * 2 + stabilityPenaltyDays * 0.8) / 7),
+        6,
+        52,
+    );
+
+    const dataCoverageScore = clamp((series.length - 2) / (FORECAST_LOOKBACK_DAYS - 2), 0.2, 1);
+    const fitScore = clamp(1 - model.mae / 0.1, 0, 1);
+    const complianceScore = clamp(
+        (exerciseStats.adherenceScore * 0.55 + dietSummary.weeklyScore * 0.45) / 100,
+        0,
+        1,
+    );
+    const trendScore = clamp((trendDelta + 8) / 16, 0, 1);
+
+    const confidence = clamp(
+        roundInt(
+            34 +
+            dataCoverageScore * 18 +
+            fitScore * 28 +
+            signalQuality * 10 +
+            complianceScore * 10 +
+            trendScore * 7 -
+            volatilityPenalty * 8 -
+            alertCount * 4,
+        ),
+        35,
+        98,
+    );
+
+    const spread = confidence >= 82 ? 1 : confidence >= 68 ? 2 : 3;
+    const minWeek = clamp(roundInt(midWeek - spread), 6, 52);
+    const maxWeek = clamp(roundInt(midWeek + spread), minWeek + 1, 60);
+
+    return {
+        minWeek,
+        maxWeek,
+        confidence,
+        delayDays,
+    };
+}
+
+function estimateSystemForecastHeuristic(
+    recentScore: number,
+    trendDelta: number,
+    alertCount: number,
+    exerciseStats: ExerciseWeeklyStats,
+    dietSummary: WeeklyDietSummary,
+): ForecastWindow {
     const baseMidWeek = 17 - (recentScore - 70) / 18 - Math.max(0, trendDelta) / 12;
     const skipPenalty = exerciseStats.skippedDays * 0.45;
     const junkPenalty = dietSummary.junkMeals * 0.25;
@@ -1149,15 +1438,15 @@ function buildDynamicMetrics(
         lowAdherencePenalty +
         vitalPenalty;
 
-    const systemMinWeek = clamp(roundInt(adjustedMidWeek - 1), 6, 52);
-    const systemMaxWeek = clamp(roundInt(adjustedMidWeek + 1), systemMinWeek + 1, 60);
+    const minWeek = clamp(roundInt(adjustedMidWeek - 1), 6, 52);
+    const maxWeek = clamp(roundInt(adjustedMidWeek + 1), minWeek + 1, 60);
 
     const delayDays = Math.max(
         0,
         roundInt((skipPenalty + junkPenalty + lowDietPenalty + lowAdherencePenalty) * 7),
     );
 
-    const systemConfidence = clamp(
+    const confidence = clamp(
         roundInt(
             85 - skipPenalty * 9 - junkPenalty * 7 - vitalPenalty * 8 + Math.max(0, trendDelta) * 1.6,
         ),
@@ -1166,18 +1455,319 @@ function buildDynamicMetrics(
     );
 
     return {
-        recoveryScore: clamp(roundInt(recentScore), 0, 100),
-        movementAccuracy,
-        flexRange,
-        alertCount,
-        trendDelta,
-        consistencyScore,
-        readinessScore,
-        systemMinWeek,
-        systemMaxWeek,
-        systemConfidence,
+        minWeek,
+        maxWeek,
+        confidence,
         delayDays,
     };
+}
+
+function fitArxModel(series: ForecastSeriesPoint[]): FittedArxModel | null {
+    if (series.length < 10) {
+        return null;
+    }
+
+    const rows: WeightedTrainingRow[] = [];
+
+    for (let idx = 2; idx < series.length; idx += 1) {
+        const prev = clamp(series[idx - 1].recoveryScore / 100, 0.2, 1);
+        const prev2 = clamp(series[idx - 2].recoveryScore / 100, 0.2, 1);
+        const vital = clamp(series[idx].vitalScore / 100, 0.2, 1);
+        const exercise = clamp(series[idx].exerciseScore / 100, 0, 1);
+        const diet = clamp(series[idx].dietScore / 100, 0, 1);
+        const session = clamp(series[idx].sessionLoad / 1.8, 0, 1.2);
+        const signal = clamp(series[idx].signalStrength, 0.2, 1);
+        const current = clamp(series[idx].recoveryScore / 100, 0.2, 1);
+
+        const recencyWeight = 0.7 + (idx / Math.max(series.length - 1, 1)) * 0.6;
+        const qualityWeight = 0.55 + signal * 0.45;
+        const weight = clamp(recencyWeight * qualityWeight, 0.45, 1.35);
+
+        rows.push({
+            x: [1, prev, prev2, vital, exercise, diet, session, signal],
+            y: current,
+            weight,
+        });
+    }
+
+    if (rows.length < 8) {
+        return null;
+    }
+
+    const splitIndex = rows.length >= 12 ? Math.floor(rows.length * 0.75) : rows.length;
+    const trainingRows = rows.slice(0, splitIndex);
+    const validationRows = rows.slice(splitIndex);
+
+    const lambdaCandidates = [0.02, 0.05, 0.08, 0.12, 0.2, 0.35];
+    let bestLambda = 0.08;
+    let bestMae = Number.POSITIVE_INFINITY;
+
+    for (const lambda of lambdaCandidates) {
+        const candidate = solveRidgeRegressionWeighted(trainingRows, lambda);
+        if (!candidate) continue;
+
+        const evaluationSet = validationRows.length > 0 ? validationRows : trainingRows;
+        const mae = computeWeightedMae(evaluationSet, candidate);
+        if (mae < bestMae) {
+            bestMae = mae;
+            bestLambda = lambda;
+        }
+    }
+
+    if (!Number.isFinite(bestMae)) {
+        return null;
+    }
+
+    const coefficients = solveRidgeRegressionWeighted(rows, bestLambda);
+    if (!coefficients) {
+        return null;
+    }
+
+    const mae = computeWeightedMae(rows, coefficients);
+
+    return {
+        coefficients,
+        mae,
+    };
+}
+
+function solveRidgeRegressionWeighted(rows: WeightedTrainingRow[], lambda: number): number[] | null {
+    if (rows.length === 0) {
+        return null;
+    }
+
+    const scaledFeatures = rows.map((row) => {
+        const scale = Math.sqrt(clamp(row.weight, 0.01, 5));
+        return row.x.map((value) => value * scale);
+    });
+    const scaledTargets = rows.map((row) => {
+        const scale = Math.sqrt(clamp(row.weight, 0.01, 5));
+        return row.y * scale;
+    });
+
+    return solveRidgeRegression(scaledFeatures, scaledTargets, lambda);
+}
+
+function computeWeightedMae(rows: WeightedTrainingRow[], coefficients: number[]): number {
+    let weightedError = 0;
+    let weightSum = 0;
+
+    for (const row of rows) {
+        const prediction = row.x.reduce(
+            (sum, value, coeffIdx) => sum + value * coefficients[coeffIdx],
+            0,
+        );
+        const weight = clamp(row.weight, 0.01, 5);
+        weightedError += Math.abs(prediction - row.y) * weight;
+        weightSum += weight;
+    }
+
+    if (weightSum <= 0) {
+        return Number.POSITIVE_INFINITY;
+    }
+
+    return weightedError / weightSum;
+}
+
+function solveRidgeRegression(
+    features: number[][],
+    targets: number[],
+    lambda: number,
+): number[] | null {
+    if (features.length === 0 || targets.length !== features.length) {
+        return null;
+    }
+
+    const featureCount = features[0].length;
+    const xtx = Array.from({ length: featureCount }, () => Array.from({ length: featureCount }, () => 0));
+    const xty = Array.from({ length: featureCount }, () => 0);
+
+    for (let rowIdx = 0; rowIdx < features.length; rowIdx += 1) {
+        const row = features[rowIdx];
+        if (row.length !== featureCount) {
+            return null;
+        }
+
+        for (let i = 0; i < featureCount; i += 1) {
+            xty[i] += row[i] * targets[rowIdx];
+            for (let j = 0; j < featureCount; j += 1) {
+                xtx[i][j] += row[i] * row[j];
+            }
+        }
+    }
+
+    for (let i = 1; i < featureCount; i += 1) {
+        xtx[i][i] += lambda;
+    }
+
+    return solveLinearSystem(xtx, xty);
+}
+
+function solveLinearSystem(matrix: number[][], values: number[]): number[] | null {
+    const size = values.length;
+    if (matrix.length !== size || size === 0) {
+        return null;
+    }
+
+    const augmented: number[][] = [];
+    for (let rowIdx = 0; rowIdx < size; rowIdx += 1) {
+        const row = matrix[rowIdx];
+        if (row.length !== size) {
+            return null;
+        }
+        augmented.push([...row, values[rowIdx]]);
+    }
+
+    try {
+        for (let col = 0; col < size; col += 1) {
+            let pivot = col;
+            for (let row = col + 1; row < size; row += 1) {
+                if (Math.abs(augmented[row][col]) > Math.abs(augmented[pivot][col])) {
+                    pivot = row;
+                }
+            }
+
+            if (Math.abs(augmented[pivot][col]) < 1e-8) {
+                return null;
+            }
+
+            if (pivot !== col) {
+                [augmented[pivot], augmented[col]] = [augmented[col], augmented[pivot]];
+            }
+
+            const pivotValue = augmented[col][col];
+            for (let k = col; k <= size; k += 1) {
+                augmented[col][k] /= pivotValue;
+            }
+
+            for (let row = 0; row < size; row += 1) {
+                if (row === col) continue;
+                const factor = augmented[row][col];
+                if (Math.abs(factor) < 1e-12) continue;
+                for (let k = col; k <= size; k += 1) {
+                    augmented[row][k] -= factor * augmented[col][k];
+                }
+            }
+        }
+    } catch {
+        return null;
+    }
+
+    const solution = augmented.map((row) => row[size]);
+    return solution.every((value) => Number.isFinite(value)) ? solution : null;
+}
+
+function forecastRecoveryPath(
+    series: ForecastSeriesPoint[],
+    coefficients: number[],
+    horizonDays: number,
+    overrides?: { exerciseScore: number; dietScore: number; sessionLoad: number },
+): number[] {
+    const current = series[series.length - 1];
+    const previous = series[series.length - 2] ?? current;
+
+    let prev = clamp((current?.recoveryScore ?? 68) / 100, 0.2, 1);
+    let prev2 = clamp((previous?.recoveryScore ?? 66) / 100, 0.2, 1);
+
+    const recentWindow = series.slice(Math.max(0, series.length - 7));
+    const avgExercise = recentWindow.length
+        ? average(recentWindow.map((point) => point.exerciseScore)) / 100
+        : 0.7;
+    const avgDiet = recentWindow.length
+        ? average(recentWindow.map((point) => point.dietScore)) / 100
+        : 0.72;
+    const avgSession = recentWindow.length
+        ? average(recentWindow.map((point) => clamp(point.sessionLoad / 1.8, 0, 1.2)))
+        : 0.72;
+    const avgSignal = recentWindow.length
+        ? average(recentWindow.map((point) => point.signalStrength))
+        : 0.72;
+
+    const targetExercise = clamp(
+        (overrides?.exerciseScore ?? current?.exerciseScore ?? 70) / 100,
+        0.1,
+        1.1,
+    );
+    const targetDiet = clamp(
+        (overrides?.dietScore ?? current?.dietScore ?? 72) / 100,
+        0.1,
+        1.1,
+    );
+    const targetSession = clamp(
+        (overrides?.sessionLoad ?? current?.sessionLoad ?? 0.8) / 1.8,
+        0.05,
+        1.2,
+    );
+    const targetSignal = clamp(overrides ? 0.95 : (current?.signalStrength ?? 0.72), 0.25, 1);
+
+    const path: number[] = [prev];
+
+    for (let day = 1; day <= horizonDays; day += 1) {
+        const blend = clamp(day / 21, 0, 1);
+        const exercise = clamp(avgExercise * (1 - blend) + targetExercise * blend, 0.1, 1.1);
+        const diet = clamp(avgDiet * (1 - blend) + targetDiet * blend, 0.1, 1.1);
+        const session = clamp(avgSession * (1 - blend) + targetSession * blend, 0.05, 1.2);
+        const signal = clamp(avgSignal * (1 - blend) + targetSignal * blend, 0.25, 1);
+        const vital = clamp(prev * 0.74 + exercise * 0.14 + diet * 0.1 + session * 0.08, 0.25, 0.99);
+
+        const next = clamp(
+            coefficients[0] +
+                coefficients[1] * prev +
+                coefficients[2] * prev2 +
+                coefficients[3] * vital +
+                coefficients[4] * exercise +
+                coefficients[5] * diet +
+                coefficients[6] * session +
+                coefficients[7] * signal,
+            0.25,
+            0.99,
+        );
+
+        path.push(next);
+        prev2 = prev;
+        prev = next;
+    }
+
+    return path;
+}
+
+function estimateDaysToReachTarget(path: number[], target: number): number {
+    for (let day = 0; day < path.length; day += 1) {
+        if (path[day] >= target) {
+            return day;
+        }
+    }
+
+    const tail = path.slice(Math.max(0, path.length - 14));
+    const slope = tail.length > 1
+        ? average(tail.slice(1).map((value, idx) => value - tail[idx]))
+        : 0;
+
+    if (slope > 0.0005) {
+        const last = path[path.length - 1] ?? 0;
+        const extraDays = (target - last) / slope;
+        return clamp(
+            roundInt(path.length - 1 + extraDays),
+            path.length - 1,
+            FORECAST_HORIZON_DAYS + 120,
+        );
+    }
+
+    return FORECAST_HORIZON_DAYS + 120;
+}
+
+function computeSeriesTrendDelta(series: ForecastSeriesPoint[]): number {
+    if (series.length < 4) {
+        return 0;
+    }
+
+    const trendWindow = Math.max(3, Math.min(7, Math.floor(series.length / 3)));
+    const leadingAverage = average(series.slice(0, trendWindow).map((point) => point.recoveryScore));
+    const trailingAverage = average(
+        series.slice(Math.max(0, series.length - trendWindow)).map((point) => point.recoveryScore),
+    );
+
+    return roundToOne(trailingAverage - leadingAverage);
 }
 
 function summarizeWeeklyExerciseStats(storageUid: string): ExerciseWeeklyStats {
@@ -1437,12 +2027,116 @@ function writeDietLog(storageUid: string, log: DailyDietLog): void {
     window.localStorage.setItem(storageKey, JSON.stringify(log));
 }
 
+function recordDailyVitalsSample(storageUid: string, sample: SensorSample): void {
+    if (typeof window === 'undefined') return;
+
+    const recoveryScore = clamp(roundInt(computeRecoveryScore(sample)), 0, 100);
+    const dateKey = resolveDateKeyFromTimestamp(sample.timestamp);
+    const current = readDailyVitalsAggregate(storageUid, dateKey);
+
+    const sampleCount = (current?.sampleCount ?? 0) + 1;
+    const sumRecoveryScore = (current?.sumRecoveryScore ?? 0) + recoveryScore;
+    const avgRecoveryScore = clamp(roundToOne(sumRecoveryScore / sampleCount), 0, 100);
+
+    const next: DailyVitalsAggregate = {
+        dateKey,
+        sampleCount,
+        sumRecoveryScore,
+        avgRecoveryScore,
+        lastRecoveryScore: recoveryScore,
+    };
+
+    const storageKey = getDailyVitalsStorageKey(storageUid, dateKey);
+    window.localStorage.setItem(storageKey, JSON.stringify(next));
+}
+
+function readDailyVitalsAggregate(storageUid: string, dateKey: string): DailyVitalsAggregate | null {
+    if (typeof window === 'undefined') {
+        return null;
+    }
+
+    const storageKey = getDailyVitalsStorageKey(storageUid, dateKey);
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return null;
+
+    try {
+        const parsed = JSON.parse(raw) as {
+            dateKey?: unknown;
+            sampleCount?: unknown;
+            sumRecoveryScore?: unknown;
+            avgRecoveryScore?: unknown;
+            lastRecoveryScore?: unknown;
+        };
+
+        const sampleCount =
+            typeof parsed.sampleCount === 'number' && Number.isFinite(parsed.sampleCount)
+                ? Math.max(0, Math.floor(parsed.sampleCount))
+                : 0;
+        if (sampleCount <= 0) {
+            return null;
+        }
+
+        const parsedSum =
+            typeof parsed.sumRecoveryScore === 'number' && Number.isFinite(parsed.sumRecoveryScore)
+                ? parsed.sumRecoveryScore
+                : undefined;
+        const parsedAvg =
+            typeof parsed.avgRecoveryScore === 'number' && Number.isFinite(parsed.avgRecoveryScore)
+                ? parsed.avgRecoveryScore
+                : undefined;
+
+        const avgFromSource =
+            parsedAvg !== undefined
+                ? parsedAvg
+                : parsedSum !== undefined
+                  ? parsedSum / sampleCount
+                  : 0;
+        const normalizedAvg = clamp(roundToOne(avgFromSource), 0, 100);
+
+        const normalizedSum = parsedSum !== undefined
+            ? parsedSum
+            : normalizedAvg * sampleCount;
+
+        const lastRecoveryScore =
+            typeof parsed.lastRecoveryScore === 'number' && Number.isFinite(parsed.lastRecoveryScore)
+                ? clamp(roundInt(parsed.lastRecoveryScore), 0, 100)
+                : clamp(roundInt(normalizedAvg), 0, 100);
+
+        return {
+            dateKey: typeof parsed.dateKey === 'string' ? parsed.dateKey : dateKey,
+            sampleCount,
+            sumRecoveryScore: normalizedSum,
+            avgRecoveryScore: normalizedAvg,
+            lastRecoveryScore,
+        };
+    } catch {
+        return null;
+    }
+}
+
 function getDailyRepStorageKey(storageUid: string, dateKey: string): string {
     return `${DAILY_REP_STORAGE_KEY_PREFIX}:${storageUid}:${dateKey}`;
 }
 
 function getDietLogStorageKey(storageUid: string, dateKey: string): string {
     return `${DIET_LOG_STORAGE_KEY_PREFIX}:${storageUid}:${dateKey}`;
+}
+
+function getDailyVitalsStorageKey(storageUid: string, dateKey: string): string {
+    return `${DAILY_VITALS_STORAGE_KEY_PREFIX}:${storageUid}:${dateKey}`;
+}
+
+function resolveDateKeyFromTimestamp(timestamp?: string): string {
+    if (!timestamp) {
+        return getLocalDateKey();
+    }
+
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) {
+        return getLocalDateKey();
+    }
+
+    return toDateKey(date);
 }
 
 function getDateKeyDaysAgo(daysAgo: number): string {
