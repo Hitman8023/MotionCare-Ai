@@ -136,7 +136,7 @@ export default function Vitals({ patientUid }: VitalsProps) {
                             </div>
                             Body Temp
                         </div>
-                        <span className="mini-tag" style={{ background: 'rgba(251,191,36,.1)', color: '#fbbf24', border: '1px solid rgba(251,191,36,.2)' }}>LM35</span>
+                        <span className="mini-tag" style={{ background: 'rgba(251,191,36,.1)', color: "var(--color-text)", border: '1px solid rgba(251,191,36,.2)' }}>LM35</span>
                     </div>
                     <div className="vital-value" style={{ color: 'var(--orange)' }}>
                         {temp ?? '--'}<span className="vital-unit">°C</span>

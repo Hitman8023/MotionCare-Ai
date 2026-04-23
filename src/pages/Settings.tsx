@@ -343,7 +343,7 @@ export default function Settings({ session }: SettingsProps) {
               <div
                 style={{
                   fontSize: "12px",
-                  color: "var(--text-muted)",
+                  color: "var(--color-text)",
                   marginTop: "2px",
                 }}
               >
@@ -360,7 +360,7 @@ export default function Settings({ session }: SettingsProps) {
                 borderRadius: "var(--radius-sm)",
                 border: "1px solid var(--border)",
                 background: "var(--surface-2)",
-                color: "var(--text-primary)",
+                color: "var(--color-text)",
                 fontSize: "13px",
                 fontWeight: 600,
                 cursor: "pointer",
@@ -464,7 +464,7 @@ export default function Settings({ session }: SettingsProps) {
 
           <div style={{ display: "grid", gap: "12px", maxWidth: "760px" }}>
             <div>
-              <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em" }}>
+              <div style={{ fontSize: "12px", color: "var(--color-text)", marginBottom: "6px", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em" }}>
                 Device UID
               </div>
               <input
@@ -476,7 +476,7 @@ export default function Settings({ session }: SettingsProps) {
                   borderRadius: "10px",
                   border: "1px solid var(--border)",
                   background: "var(--surface-2)",
-                  color: "var(--text-primary)",
+                  color: "var(--color-text)",
                   padding: "11px 12px",
                   fontFamily: "var(--mono)",
                   fontSize: "13px",
@@ -486,7 +486,7 @@ export default function Settings({ session }: SettingsProps) {
 
             {isDoctor ? (
               <div>
-                <div style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "6px", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em" }}>
+                <div style={{ fontSize: "12px", color: "var(--color-text)", marginBottom: "6px", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em" }}>
                   Patient UID
                 </div>
                 <select
@@ -497,7 +497,7 @@ export default function Settings({ session }: SettingsProps) {
                     borderRadius: "10px",
                     border: "1px solid var(--border)",
                     background: "var(--surface-2)",
-                    color: "var(--text-primary)",
+                    color: "var(--color-text)",
                     padding: "11px 12px",
                     fontSize: "13px",
                   }}
@@ -511,7 +511,7 @@ export default function Settings({ session }: SettingsProps) {
                 </select>
               </div>
             ) : (
-              <div style={{ fontSize: "13px", color: "var(--text-secondary)", background: "var(--surface-2)", border: "1px solid var(--border-light)", borderRadius: "10px", padding: "10px 12px" }}>
+              <div style={{ fontSize: "13px", color: "var(--color-text)", background: "var(--surface-2)", border: "1px solid var(--border-light)", borderRadius: "10px", padding: "10px 12px" }}>
                 Binding target UID: <span style={{ fontFamily: "var(--mono)", fontWeight: 700 }}>{session.uid}</span>
               </div>
             )}
@@ -525,7 +525,7 @@ export default function Settings({ session }: SettingsProps) {
                   borderRadius: "10px",
                   border: "1px solid var(--border)",
                   background: "var(--surface-2)",
-                  color: "var(--text-primary)",
+                  color: "var(--color-text)",
                   padding: "10px 14px",
                   fontWeight: 700,
                   cursor: "pointer",
@@ -552,7 +552,7 @@ export default function Settings({ session }: SettingsProps) {
             </div>
 
             {currentBinding ? (
-              <div style={{ fontSize: "13px", color: "var(--text-secondary)", fontFamily: "var(--mono)" }}>
+              <div style={{ fontSize: "13px", color: "var(--color-text)", fontFamily: "var(--mono)" }}>
                 Current mapped patient UID: {currentBinding}
               </div>
             ) : null}
@@ -598,7 +598,7 @@ export default function Settings({ session }: SettingsProps) {
                 <div
                   style={{
                     fontSize: "11px",
-                    color: "var(--text-muted)",
+                    color: "var(--color-text)",
                     fontWeight: 600,
                     textTransform: "uppercase",
                     letterSpacing: ".05em",

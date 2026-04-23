@@ -28,6 +28,7 @@ import Profile from "./pages/Profile";
 import Onboarding from "./pages/Onboarding";
 import ChatPage from "./pages/ChatPage";
 import PatientDetailPage from "./pages/PatientDetailPage";
+import Loader from "./components/Loader";
 import type { SessionUser, UserRole } from "./types/auth";
 
 function AppShell({
@@ -248,11 +249,14 @@ function AppRouter() {
           className="auth-panel card"
           style={{
             textAlign: "center",
-            color: "var(--text-muted)",
+            color: "var(--color-text)",
             fontSize: "14px",
           }}
         >
-          Loading MotionCare AI...
+          <div style={{ display: "grid", justifyItems: "center", gap: "12px" }}>
+            <Loader />
+            <span>Loading MotionCare AI...</span>
+          </div>
         </div>
       </div>
     );

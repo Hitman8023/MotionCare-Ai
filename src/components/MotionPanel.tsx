@@ -774,7 +774,7 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                             </svg>
                         </div>
                         Hand Movement Analysis
-                        <span className="mini-tag" style={{ background: 'rgba(34,211,238,.1)', color: '#22d3ee', border: '1px solid rgba(34,211,238,.2)' }}>MPU6050</span>
+                        <span className="mini-tag" style={{ background: 'rgba(34,211,238,.1)', color: "var(--color-text)", border: '1px solid rgba(34,211,238,.2)' }}>MPU6050</span>
                     </div>
                     <span className="mini-tag tag-live">LIVE</span>
                 </div>
@@ -1012,7 +1012,7 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                                         color: rom.color,
                                     }}>
                                         {fmtSigned(displayAngle, 0)}{rom.unit}
-                                        <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '12px' }}>
+                                        <span style={{ color: "var(--color-text)", fontWeight: 400, fontSize: '12px' }}>
                                             {' '}/{fmtSigned(targetAngle, 0)}{rom.unit}
                                         </span>
                                     </span>
@@ -1022,7 +1022,7 @@ export default function MotionPanel({ patientUid }: MotionPanelProps) {
                                     background: 'rgba(255,255,255,.05)',
                                     borderRadius: '2px',
                                     overflow: 'hidden',
-                                    border: `1px solid ${isCurrentExercise ? rom.color : 'rgba(255,255,255,.1)'}`,
+                                    border: `1px solid ${isCurrentExercise ? rom.color: "var(--color-text)"}`,
                                     opacity: isCurrentExercise ? 1 : 0.6,
                                 }}>
                                     <div style={{

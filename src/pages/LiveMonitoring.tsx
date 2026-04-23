@@ -68,10 +68,10 @@ export default function LiveMonitoring({ role, patientUid }: LiveMonitoringProps
     const gyroMagnitude = sample ? Math.sqrt((sample.gyro_x ** 2) + (sample.gyro_y ** 2) + (sample.gyro_z ** 2)) : 0;
 
     const monitors = [
-        { label: 'Heart Rate', value: sample ? String(sample.heart_rate) : '--', unit: 'BPM', color: '#f87171', path: hrPath, status: 'Normal' },
-        { label: 'SpO₂', value: sample ? String(sample.spo2) : '--', unit: '%', color: '#a78bfa', path: spo2Path, status: 'Optimal' },
-        { label: 'Body Temperature', value: sample ? String(sample.temperature) : '--', unit: '°C', color: '#fbbf24', path: tempPath, status: 'Normal' },
-        { label: 'Gyro Magnitude', value: sample ? gyroMagnitude.toFixed(3) : '--', unit: 'rad/s', color: '#22d3ee', path: gyroPath, status: 'Live' },
+        { label: 'Heart Rate', value: sample ? String(sample.heart_rate) : '--', unit: 'BPM', color: "var(--color-text)", path: hrPath, status: 'Normal' },
+        { label: 'SpO₂', value: sample ? String(sample.spo2) : '--', unit: '%', color: "var(--color-text)", path: spo2Path, status: 'Optimal' },
+        { label: 'Body Temperature', value: sample ? String(sample.temperature) : '--', unit: '°C', color: "var(--color-text)", path: tempPath, status: 'Normal' },
+        { label: 'Gyro Magnitude', value: sample ? gyroMagnitude.toFixed(3) : '--', unit: 'rad/s', color: "var(--color-text)", path: gyroPath, status: 'Live' },
     ];
 
     return (
@@ -98,13 +98,13 @@ export default function LiveMonitoring({ role, patientUid }: LiveMonitoringProps
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                     <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--green)', boxShadow: '0 0 10px rgba(52,211,153,.5)', animation: 'pulse-ring 2s infinite' }}></div>
                                     <span style={{ fontWeight: 700, fontSize: '14px' }}>Session Active</span>
-                                    <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>ESP32 · MPU6050 · LM35 · MAX30102</span>
+                                    <span style={{ color: "var(--color-text)", fontSize: '13px' }}>ESP32 · MPU6050 · LM35 · MAX30102</span>
                                 </div>
                                 <div style={{ display: 'flex', gap: '24px' }}>
                                     {[{ l: 'Duration', v: fmt(elapsed) }, { l: 'Path', v: '/liveData' }, { l: 'UID', v: `${patientUid.slice(0, 6)}...` }, { l: 'Status', v: sample ? 'Live' : 'Waiting' }].map((s, i) => (
                                         <div key={i} style={{ textAlign: 'center' }}>
                                             <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--teal)', fontFamily: 'var(--mono)' }}>{s.v}</div>
-                                            <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700 }}>{s.l}</div>
+                                            <div style={{ fontSize: '10px', color: "var(--color-text)", textTransform: 'uppercase', letterSpacing: '.08em', fontWeight: 700 }}>{s.l}</div>
                                         </div>
                                     ))}
                                 </div>
@@ -128,7 +128,7 @@ export default function LiveMonitoring({ role, patientUid }: LiveMonitoringProps
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
                                     <span style={{ fontSize: '48px', fontWeight: 900, color: m.color, letterSpacing: '-2.5px', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{m.value}</span>
-                                    <span style={{ fontSize: '16px', color: 'var(--text-muted)', fontWeight: 500 }}>{m.unit}</span>
+                                    <span style={{ fontSize: '16px', color: "var(--color-text)", fontWeight: 500 }}>{m.unit}</span>
                                 </div>
                                 <div style={{ marginTop: '8px', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, background: 'rgba(52,211,153,.1)', color: 'var(--green)', border: '1px solid rgba(52,211,153,.2)' }}>
                                     <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" /></svg>
@@ -162,9 +162,9 @@ export default function LiveMonitoring({ role, patientUid }: LiveMonitoringProps
                                     { time: '--:--:--', msg: `Patient UID stream: ${patientUid}`, type: 'info' },
                                 ].map((log, i) => (
                                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: 'var(--radius-sm)', background: log.type === 'success' ? 'rgba(52,211,153,.05)' : 'rgba(96,165,250,.05)', border: `1px solid ${log.type === 'success' ? 'rgba(52,211,153,.12)' : 'rgba(96,165,250,.12)'}` }}>
-                                        <span style={{ fontSize: '12px', fontFamily: 'var(--mono)', color: 'var(--text-muted)', flexShrink: 0 }}>{log.time}</span>
+                                        <span style={{ fontSize: '12px', fontFamily: 'var(--mono)', color: "var(--color-text)", flexShrink: 0 }}>{log.time}</span>
                                         <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: log.type === 'success' ? 'var(--green)' : 'var(--blue)', flexShrink: 0 }}></div>
-                                        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{log.msg}</span>
+                                        <span style={{ fontSize: '13px', color: "var(--color-text)" }}>{log.msg}</span>
                                     </div>
                                 ))}
                             </div>

@@ -65,7 +65,7 @@ export default function EstimationForm({
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
         {/* Min Weeks */}
         <div>
-          <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "6px" }}>
+          <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--color-text)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "6px" }}>
             Min Recovery Weeks
           </label>
           <input
@@ -81,7 +81,7 @@ export default function EstimationForm({
               border: "1px solid var(--border-color)",
               borderRadius: "var(--radius-sm)",
               background: "var(--card-bg)",
-              color: "var(--text-primary)",
+              color: "var(--color-text)",
               fontSize: "14px",
               fontFamily: "inherit",
             }}
@@ -90,7 +90,7 @@ export default function EstimationForm({
 
         {/* Max Weeks */}
         <div>
-          <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "6px" }}>
+          <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--color-text)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "6px" }}>
             Max Recovery Weeks
           </label>
           <input
@@ -106,7 +106,7 @@ export default function EstimationForm({
               border: "1px solid var(--border-color)",
               borderRadius: "var(--radius-sm)",
               background: "var(--card-bg)",
-              color: "var(--text-primary)",
+              color: "var(--color-text)",
               fontSize: "14px",
               fontFamily: "inherit",
             }}
@@ -116,7 +116,7 @@ export default function EstimationForm({
 
       {/* Confidence */}
       <div>
-        <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "6px" }}>
+        <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--color-text)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "6px" }}>
           Confidence Level: {confidence}%
         </label>
         <input
@@ -136,14 +136,14 @@ export default function EstimationForm({
             cursor: "pointer",
           }}
         />
-        <div style={{ fontSize: "11px", color: "var(--text-muted)", marginTop: "4px" }}>
+        <div style={{ fontSize: "11px", color: "var(--color-text)", marginTop: "4px" }}>
           How confident are you with this estimation?
         </div>
       </div>
 
       {/* Notes */}
       <div>
-        <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "6px" }}>
+        <label style={{ display: "block", fontSize: "12px", fontWeight: 700, color: "var(--color-text)", textTransform: "uppercase", letterSpacing: ".05em", marginBottom: "6px" }}>
           Clinical Notes (Optional)
         </label>
         <textarea
@@ -156,7 +156,7 @@ export default function EstimationForm({
             border: "1px solid var(--border-color)",
             borderRadius: "var(--radius-sm)",
             background: "var(--card-bg)",
-            color: "var(--text-primary)",
+            color: "var(--color-text)",
             fontSize: "14px",
             fontFamily: "inherit",
             minHeight: "80px",
@@ -173,7 +173,7 @@ export default function EstimationForm({
           padding: "10px 16px",
           borderRadius: "var(--radius-sm)",
           background: loading ? "var(--border-color)" : "var(--teal)",
-          color: "#fff",
+          color: "var(--color-text)",
           border: "none",
           fontWeight: 700,
           cursor: loading ? "not-allowed" : "pointer",
@@ -190,7 +190,7 @@ export default function EstimationForm({
           borderRadius: "var(--radius-sm)",
           background: "rgba(52, 211, 153, 0.06)",
           border: "1px solid rgba(52, 211, 153, 0.15)",
-          color: "#6ee7b7",
+          color: "var(--color-text)",
           fontSize: "13px",
           fontWeight: 600,
         }}>

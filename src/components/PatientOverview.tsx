@@ -170,7 +170,7 @@ export default function PatientOverview({
                     style={{
                       background:
                         "linear-gradient(135deg, rgba(34,211,238,.15), rgba(139,92,246,.1))",
-                      color: "#22d3ee",
+                      color: "var(--color-text)",
                       padding: "2px 10px",
                       borderRadius: "10px",
                       fontSize: "11px",
@@ -275,7 +275,7 @@ export default function PatientOverview({
             <div
               style={{
                 fontSize: "11px",
-                color: "var(--text-muted)",
+                color: "var(--color-text)",
                 fontWeight: 700,
                 letterSpacing: ".04em",
               }}

@@ -438,7 +438,7 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
             <span className="mini-tag tag-new">
               {scoreDelta >= 0 ? `+${scoreDelta}` : scoreDelta} pts
             </span>
-            <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+            <span style={{ fontSize: "11px", color: "var(--color-text)" }}>
               Live session trend
             </span>
           </div>
@@ -467,7 +467,7 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
           <div className="progress-stat-card">
             <div
               className="progress-stat-val"
-              style={{ color: "var(--text-primary)" }}
+              style={{ color: "var(--color-text)" }}
             >
               {completedCheckpoints}/{checkpointGrid.length}
             </div>
@@ -491,7 +491,7 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
           style={{
             fontSize: "11px",
             fontWeight: 800,
-            color: "var(--text-muted)",
+            color: "var(--color-text)",
             letterSpacing: ".1em",
             textTransform: "uppercase" as const,
             marginBottom: "10px",
@@ -528,7 +528,7 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
             style={{
               fontSize: "11px",
               fontWeight: 800,
-              color: "var(--text-muted)",
+              color: "var(--color-text)",
               letterSpacing: ".1em",
               textTransform: "uppercase" as const,
             }}
@@ -851,7 +851,7 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
                 <div
                   style={{
                     fontSize: "11px",
-                    color: "var(--text-muted)",
+                    color: "var(--color-text)",
                     marginTop: "3px",
                     fontWeight: 600,
                   }}

@@ -67,7 +67,7 @@ export default function Profile({ session }: ProfileProps) {
               style={{ border: "1px solid var(--border-light)" }}
             >
               <div className="patient-row-main">
-                <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                <div style={{ fontSize: "12px", color: "var(--color-text)" }}>
                   Role
                 </div>
                 <div style={{ fontSize: "14px", fontWeight: 700 }}>
@@ -75,7 +75,7 @@ export default function Profile({ session }: ProfileProps) {
                 </div>
               </div>
               <div className="patient-row-stat">
-                <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                <div style={{ fontSize: "12px", color: "var(--color-text)" }}>
                   UID
                 </div>
                 <div style={{ fontFamily: "var(--mono)", fontSize: "12px" }}>
@@ -89,13 +89,13 @@ export default function Profile({ session }: ProfileProps) {
               style={{ border: "1px solid var(--border-light)" }}
             >
               <div className="patient-row-main">
-                <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                <div style={{ fontSize: "12px", color: "var(--color-text)" }}>
                   Email
                 </div>
                 <div style={{ fontSize: "14px", fontWeight: 700 }}>{email}</div>
               </div>
               <div className="patient-row-stat">
-                <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                <div style={{ fontSize: "12px", color: "var(--color-text)" }}>
                   Created
                 </div>
                 <div style={{ fontFamily: "var(--mono)", fontSize: "12px" }}>
@@ -110,7 +110,7 @@ export default function Profile({ session }: ProfileProps) {
                 style={{ border: "1px solid var(--border-light)" }}
               >
                 <div className="patient-row-main">
-                  <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                  <div style={{ fontSize: "12px", color: "var(--color-text)" }}>
                     Surgery
                   </div>
                   <div style={{ fontSize: "14px", fontWeight: 700 }}>
@@ -119,7 +119,7 @@ export default function Profile({ session }: ProfileProps) {
                   <div
                     style={{
                       fontSize: "12px",
-                      color: "var(--text-muted)",
+                      color: "var(--color-text)",
                       marginTop: "6px",
                     }}
                   >
@@ -127,7 +127,7 @@ export default function Profile({ session }: ProfileProps) {
                   </div>
                 </div>
                 <div className="patient-row-stat">
-                  <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                  <div style={{ fontSize: "12px", color: "var(--color-text)" }}>
                     Therapist
                   </div>
                   <div style={{ fontFamily: "var(--mono)", fontSize: "12px" }}>
@@ -141,7 +141,7 @@ export default function Profile({ session }: ProfileProps) {
                 style={{ border: "1px solid var(--border-light)" }}
               >
                 <div className="patient-row-main">
-                  <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                  <div style={{ fontSize: "12px", color: "var(--color-text)" }}>
                     Clinic Access
                   </div>
                   <div style={{ fontSize: "14px", fontWeight: 700 }}>
@@ -149,7 +149,7 @@ export default function Profile({ session }: ProfileProps) {
                   </div>
                 </div>
                 <div className="patient-row-stat">
-                  <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                  <div style={{ fontSize: "12px", color: "var(--color-text)" }}>
                     Patients
                   </div>
                   <div style={{ fontFamily: "var(--mono)", fontSize: "12px" }}>

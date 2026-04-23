@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import EstimationForm from "../components/EstimationForm";
+import Loader from "../components/Loader";
 import { getDoctorEstimation } from "../services/estimationService";
 import type { DoctorEstimation } from "../types/estimation";
 
@@ -123,7 +124,8 @@ export default function PatientDetailPage({ doctorId }: { doctorId: string }) {
 
   if (loading) {
     return (
-      <div style={{ padding: "20px" }}>
+      <div style={{ padding: "20px", display: "grid", gap: "10px" }}>
+        <Loader />
         <p>Loading patient details...</p>
       </div>
     );
@@ -135,7 +137,7 @@ export default function PatientDetailPage({ doctorId }: { doctorId: string }) {
         <p style={{ color: "var(--red)", marginBottom: "12px" }}>
           ⚠️ {error || "Patient not found"}
         </p>
-        <p style={{ fontSize: "12px", color: "var(--text-muted)", marginBottom: "16px" }}>
+        <p style={{ fontSize: "12px", color: "var(--color-text)", marginBottom: "16px" }}>
           Debug info: Patient ID = {patientId}
         </p>
         <button 
@@ -144,7 +146,7 @@ export default function PatientDetailPage({ doctorId }: { doctorId: string }) {
             padding: "8px 12px",
             borderRadius: "var(--radius-sm)",
             background: "var(--teal)",
-            color: "#fff",
+            color: "var(--color-text)",
             border: "none",
             cursor: "pointer",
             fontSize: "13px",
@@ -191,25 +193,25 @@ export default function PatientDetailPage({ doctorId }: { doctorId: string }) {
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
               {/* Basic Info */}
               <div style={{ padding: "12px", borderRadius: "8px", background: "rgba(148,163,184,.05)" }}>
-                <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "8px" }}>
+                <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--color-text)", textTransform: "uppercase", marginBottom: "8px" }}>
                   Basic Information
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                   <div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Age</div>
-                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>
+                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Age</div>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text)" }}>
                       {patient.age || "—"}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Gender</div>
-                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>
+                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Gender</div>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text)" }}>
                       {patient.gender || "—"}
                     </div>
                   </div>
                   <div style={{ gridColumn: "1 / -1" }}>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Phone</div>
-                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>
+                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Phone</div>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text)" }}>
                       {patient.phone || "—"}
                     </div>
                   </div>
@@ -218,37 +220,37 @@ export default function PatientDetailPage({ doctorId }: { doctorId: string }) {
 
               {/* Medical History */}
               <div style={{ padding: "12px", borderRadius: "8px", background: "rgba(148,163,184,.05)" }}>
-                <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "8px" }}>
+                <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--color-text)", textTransform: "uppercase", marginBottom: "8px" }}>
                   Medical History
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                   <div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Incident Type</div>
-                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>
+                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Incident Type</div>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text)" }}>
                       {patient.incidentType || "—"}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Condition</div>
-                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>
+                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Condition</div>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text)" }}>
                       {patient.condition || "—"}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Current Stage</div>
-                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>
+                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Current Stage</div>
+                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text)" }}>
                       {patient.stage || "—"}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Medications</div>
-                    <div style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Medications</div>
+                    <div style={{ fontSize: "13px", color: "var(--color-text)", lineHeight: 1.5 }}>
                       {patient.medications || "—"}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Allergies</div>
-                    <div style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Allergies</div>
+                    <div style={{ fontSize: "13px", color: "var(--color-text)", lineHeight: 1.5 }}>
                       {patient.allergies || "—"}
                     </div>
                   </div>
@@ -257,10 +259,10 @@ export default function PatientDetailPage({ doctorId }: { doctorId: string }) {
 
               {/* Incident Description */}
               <div style={{ padding: "12px", borderRadius: "8px", background: "rgba(148,163,184,.05)" }}>
-                <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "8px" }}>
+                <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--color-text)", textTransform: "uppercase", marginBottom: "8px" }}>
                   Incident Details
                 </div>
-                <div style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: 1.6 }}>
+                <div style={{ fontSize: "13px", color: "var(--color-text)", lineHeight: 1.6 }}>
                   {patient.incidentDescription || "No description provided"}
                 </div>
               </div>
@@ -283,27 +285,27 @@ export default function PatientDetailPage({ doctorId }: { doctorId: string }) {
                 border: "1px solid rgba(34, 211, 238, 0.15)",
                 marginBottom: "16px",
               }}>
-                <div style={{ fontSize: "11px", fontWeight: 700, color: "#22d3ee", textTransform: "uppercase", marginBottom: "8px" }}>
+                <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--color-text)", textTransform: "uppercase", marginBottom: "8px" }}>
                   Current Estimation
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
                   <div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Range</div>
-                    <div style={{ fontSize: "16px", fontWeight: 700, color: "#22d3ee" }}>
+                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Range</div>
+                    <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--color-text)" }}>
                       Week {estimation.minWeeks}–{estimation.maxWeeks}
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Confidence</div>
-                    <div style={{ fontSize: "16px", fontWeight: 700, color: "#22d3ee" }}>
+                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Confidence</div>
+                    <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--color-text)" }}>
                       {estimation.confidence}%
                     </div>
                   </div>
                 </div>
                 {estimation.notes && (
                   <div>
-                    <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "4px" }}>Notes</div>
-                    <div style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
+                    <div style={{ fontSize: "11px", color: "var(--color-text)", marginBottom: "4px" }}>Notes</div>
+                    <div style={{ fontSize: "12px", color: "var(--color-text)" }}>
                       {estimation.notes}
                     </div>
                   </div>

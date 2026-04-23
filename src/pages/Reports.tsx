@@ -760,24 +760,24 @@ export default function Reports({ session }: { session: SessionUser }) {
       <div className="pb-8 patient-reports-root">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 rounded-3xl border border-slate-800 bg-slate-950/70 p-4 shadow-[0_24px_50px_rgba(2,6,23,0.55)] backdrop-blur sm:p-6 lg:p-8 patient-reports-shell">
           <header className="space-y-2 patient-reports-header">
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-100 sm:text-3xl">
+            <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-text)] sm:text-3xl">
               My Health Reports
             </h1>
-            <p className="max-w-2xl text-sm text-slate-400 sm:text-base">
+            <p className="max-w-2xl text-sm text-[var(--color-text)] sm:text-base">
               Keep all your medical records in one safe place so you can easily share updates with your care team.
             </p>
           </header>
 
           <section className="rounded-2xl border border-cyan-500/20 bg-slate-900/70 p-4 shadow-[0_14px_35px_rgba(8,47,73,0.35)] backdrop-blur sm:p-5 patient-upload-card">
           <div className="mb-3">
-            <h2 className="text-lg font-semibold text-slate-100">Upload New Report</h2>
-            <p className="mt-1 text-sm text-slate-400">
+            <h2 className="text-lg font-semibold text-[var(--color-text)]">Upload New Report</h2>
+            <p className="mt-1 text-sm text-[var(--color-text)]">
               Upload your prescriptions, test results, or reports
             </p>
           </div>
 
           <div className="grid gap-3">
-            <label className="text-sm font-medium text-slate-200" htmlFor="patient-report-name">
+            <label className="text-sm font-medium text-[var(--color-text)]" htmlFor="patient-report-name">
               Report Name
             </label>
             <input
@@ -790,7 +790,7 @@ export default function Reports({ session }: { session: SessionUser }) {
               }}
               placeholder="Example: Blood Test - March 2026"
               disabled={uploading}
-              className="h-11 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 text-sm text-slate-100 placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none disabled:opacity-70"
+              className="h-11 w-full rounded-xl border border-slate-700 bg-slate-950 px-4 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text)] focus:border-cyan-400 focus:outline-none disabled:text-[var(--color-text)]"
             />
 
             <div
@@ -823,14 +823,14 @@ export default function Reports({ session }: { session: SessionUser }) {
                   : "border-slate-700 bg-slate-950/70 hover:border-cyan-600/70 hover:bg-slate-900"
               } patient-upload-dropzone`}
             >
-              <p className="text-sm font-medium text-slate-200">
+              <p className="text-sm font-medium text-[var(--color-text)]">
                 Drag and drop a file here, or click to choose a file
               </p>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-[var(--color-text)]">
                 PDF, JPG, PNG up to 10MB
               </p>
               {selectedFile ? (
-                <p className="mt-2 truncate text-xs font-medium text-cyan-300">
+                <p className="mt-2 truncate text-xs font-medium text-[var(--color-text)]">
                   Selected file: {selectedFile.name}
                 </p>
               ) : null}
@@ -850,7 +850,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                 type="button"
                 onClick={handleFileUpload}
                 disabled={uploading || !selectedFile}
-                className="inline-flex h-10 items-center justify-center rounded-xl px-5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                className="inline-flex h-10 items-center justify-center rounded-xl px-5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-[var(--color-text)]"
                 style={{
                   background: uploading || !selectedFile
                     ? "rgb(51 65 85)"
@@ -860,24 +860,24 @@ export default function Reports({ session }: { session: SessionUser }) {
               >
                 {uploading ? "Uploading..." : "Upload Report"}
               </button>
-              <p className="text-xs text-slate-500">Your report stays private to you and your care team.</p>
+              <p className="text-xs text-[var(--color-text)]">Your report stays private to you and your care team.</p>
             </div>
 
             {uploadMessage ? (
               <div
                 className={`rounded-xl border px-4 py-3 text-sm ${
                   uploadMessage.toLowerCase().includes("success")
-                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                    ? "border-emerald-500/40 bg-emerald-500/10 text-[var(--color-text)]"
                     : uploadMessage.toLowerCase().includes("uploading")
-                      ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-300"
-                      : "border-slate-700 bg-slate-900 text-slate-300"
+                      ? "border-cyan-500/40 bg-cyan-500/10 text-[var(--color-text)]"
+                      : "border-slate-700 bg-slate-900 text-[var(--color-text)]"
                 }`}
               >
                 <div className="flex items-center gap-2">
                   {uploadMessage.toLowerCase().includes("uploading") ? (
                     <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-cyan-300 border-t-transparent" />
                   ) : uploadMessage.toLowerCase().includes("success") ? (
-                    <span className="text-emerald-300">✓</span>
+                    <span className="text-[var(--color-text)]">✓</span>
                   ) : null}
                   <span>{uploadMessage}</span>
                 </div>
@@ -901,8 +901,8 @@ export default function Reports({ session }: { session: SessionUser }) {
                     onClick={() => setPatientFilter(filter.key as "all" | "recent" | "pending")}
                       className={`rounded-full px-4 py-2 text-sm font-medium transition duration-200 ${
                       selected
-                          ? "bg-cyan-300 text-slate-950 shadow-[0_0_0_1px_rgba(34,211,238,0.7)]"
-                          : "border border-slate-700 bg-slate-900 text-slate-300 hover:-translate-y-0.5 hover:border-slate-500"
+                          ? "bg-cyan-300 text-[var(--color-text)] shadow-[0_0_0_1px_rgba(34,211,238,0.7)]"
+                          : "border border-slate-700 bg-slate-900 text-[var(--color-text)] hover:-translate-y-0.5 hover:border-slate-500"
                     }`}
                   >
                     {filter.label}
@@ -922,26 +922,26 @@ export default function Reports({ session }: { session: SessionUser }) {
                       <div className="min-w-0 flex-1">
                         <div className="mb-1 flex items-center gap-2">
                           {getReportKind(report) === "pdf" ? (
-                            <span className="rounded-md bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-rose-300">PDF</span>
+                            <span className="rounded-md bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-text)]">PDF</span>
                           ) : getReportKind(report) === "image" ? (
-                            <span className="rounded-md bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-blue-300">IMG</span>
+                            <span className="rounded-md bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-text)]">IMG</span>
                           ) : (
-                            <span className="rounded-md bg-slate-600/20 px-1.5 py-0.5 text-[10px] font-semibold text-slate-300">DOC</span>
+                            <span className="rounded-md bg-slate-600/20 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-text)]">DOC</span>
                           )}
-                          <h3 className="truncate text-base font-semibold text-slate-100" title={report.friendlyName}>
+                          <h3 className="truncate text-base font-semibold text-[var(--color-text)]" title={report.friendlyName}>
                             {report.friendlyName}
                           </h3>
                         </div>
-                        <p className="mt-1 text-xs text-slate-400">Uploaded on {report.date}</p>
+                        <p className="mt-1 text-xs text-[var(--color-text)]">Uploaded on {report.date}</p>
                         {report.fileName ? (
-                          <p className="mt-1 truncate text-[11px] text-slate-500" title={report.fileName}>{report.fileName}</p>
+                          <p className="mt-1 truncate text-[11px] text-[var(--color-text)]" title={report.fileName}>{report.fileName}</p>
                         ) : null}
                       </div>
                       <span
                         className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
                           report.friendlyStatus === "Pending Review"
-                            ? "bg-amber-400/15 text-amber-300"
-                            : "bg-emerald-500/20 text-emerald-300"
+                            ? "bg-amber-400/15 text-[var(--color-text)]"
+                            : "bg-emerald-500/20 text-[var(--color-text)]"
                         }`}
                       >
                         {report.friendlyStatus}
@@ -955,7 +955,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                           void handleViewReport(report);
                         }}
                         disabled={!report.fileUrl}
-                        className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-700 px-3 text-sm font-medium text-slate-200 transition hover:border-cyan-500 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-700 px-3 text-sm font-medium text-[var(--color-text)] transition hover:border-cyan-500 disabled:cursor-not-allowed disabled:text-[var(--color-text)]"
                       >
                         View
                       </button>
@@ -963,7 +963,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                         type="button"
                         onClick={() => handleExportReport(report)}
                         disabled={!report.fileUrl}
-                        className="inline-flex h-9 items-center justify-center rounded-lg bg-cyan-500/20 px-3 text-sm font-semibold text-cyan-200 transition hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                        className="inline-flex h-9 items-center justify-center rounded-lg bg-cyan-500/20 px-3 text-sm font-semibold text-[var(--color-text)] transition hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-[var(--color-text)]"
                       >
                         Download
                       </button>
@@ -973,7 +973,7 @@ export default function Reports({ session }: { session: SessionUser }) {
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/60 p-10 text-center patient-report-empty-state">
-                <div className="mb-4 rounded-full border border-slate-700 bg-slate-800/80 p-3 text-cyan-300">
+                <div className="mb-4 rounded-full border border-slate-700 bg-slate-800/80 p-3 text-[var(--color-text)]">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                     <polyline points="14 2 14 8 20 8" />
@@ -981,10 +981,10 @@ export default function Reports({ session }: { session: SessionUser }) {
                     <line x1="9" y1="14" x2="15" y2="14" />
                   </svg>
                 </div>
-                <p className="text-base font-medium text-slate-200">
+                <p className="text-base font-medium text-[var(--color-text)]">
                   No reports yet. Upload your first report to get started
                 </p>
-                <p className="mt-2 text-sm text-slate-500">
+                <p className="mt-2 text-sm text-[var(--color-text)]">
                   Add your first file and it will appear here for quick access.
                 </p>
               </div>
@@ -1009,13 +1009,13 @@ export default function Reports({ session }: { session: SessionUser }) {
 
         <section className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 shadow-[0_12px_30px_rgba(2,6,23,0.45)]">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-slate-300">Assigned Patients</h2>
-            <span className="text-xs text-slate-400">{filteredAssignedPatients.length} patients</span>
+            <h2 className="text-sm font-semibold uppercase tracking-[0.08em] text-[var(--color-text)]">Assigned Patients</h2>
+            <span className="text-xs text-[var(--color-text)]">{filteredAssignedPatients.length} patients</span>
           </div>
 
           <div className="relative mb-3">
             <svg
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--color-text)]"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -1029,7 +1029,7 @@ export default function Reports({ session }: { session: SessionUser }) {
               value={doctorPatientSearch}
               onChange={(event) => setDoctorPatientSearch(event.target.value)}
               placeholder="Search patients by name, age, or injury"
-              className="h-10 w-full rounded-xl border border-slate-700 bg-slate-950 pl-9 pr-3 text-sm text-slate-200 placeholder:text-slate-500 transition duration-200 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
+              className="h-10 w-full rounded-xl border border-slate-700 bg-slate-950 pl-9 pr-3 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text)] transition duration-200 focus:border-cyan-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/30"
             />
           </div>
 
@@ -1049,17 +1049,17 @@ export default function Reports({ session }: { session: SessionUser }) {
                   }`}
                 >
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-100">{patient.displayName}</p>
-                    <p className="mt-0.5 text-xs text-slate-400">Age {patient.age} • {patient.injury}</p>
-                    <p className="mt-1 text-xs text-slate-500">Last report: {summary.lastReportDate}</p>
+                    <p className="truncate text-sm font-semibold text-[var(--color-text)]">{patient.displayName}</p>
+                    <p className="mt-0.5 text-xs text-[var(--color-text)]">Age {patient.age} • {patient.injury}</p>
+                    <p className="mt-1 text-xs text-[var(--color-text)]">Last report: {summary.lastReportDate}</p>
                   </div>
                   <span
                     className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                       summary.lastReportStatus === "Reviewed"
-                        ? "bg-emerald-500/20 text-emerald-300"
+                        ? "bg-emerald-500/20 text-[var(--color-text)]"
                         : summary.lastReportStatus === "Needs Attention"
-                          ? "bg-rose-500/20 text-rose-300"
-                          : "bg-amber-500/20 text-amber-300"
+                          ? "bg-rose-500/20 text-[var(--color-text)]"
+                          : "bg-amber-500/20 text-[var(--color-text)]"
                     }`}
                   >
                     {summary.lastReportStatus}
@@ -1068,7 +1068,7 @@ export default function Reports({ session }: { session: SessionUser }) {
               );
             })}
             {!filteredAssignedPatients.length ? (
-              <p className="text-xs text-slate-400">No assigned patients found.</p>
+              <p className="text-xs text-[var(--color-text)]">No assigned patients found.</p>
             ) : null}
           </div>
         </section>
@@ -1079,29 +1079,29 @@ export default function Reports({ session }: { session: SessionUser }) {
           <section className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 shadow-[0_10px_28px_rgba(2,6,23,0.45)]">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-lg font-semibold text-slate-100">{selectedDoctorPatient.displayName}</h3>
-                <p className="text-sm text-slate-400">Age {selectedDoctorPatient.age} • Injury: {selectedDoctorPatient.injury}</p>
-                <p className="text-xs text-slate-500">Last activity: {selectedSummary?.lastReportDate || "No activity yet"}</p>
+                <h3 className="text-lg font-semibold text-[var(--color-text)]">{selectedDoctorPatient.displayName}</h3>
+                <p className="text-sm text-[var(--color-text)]">Age {selectedDoctorPatient.age} • Injury: {selectedDoctorPatient.injury}</p>
+                <p className="text-xs text-[var(--color-text)]">Last activity: {selectedSummary?.lastReportDate || "No activity yet"}</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => navigate("/live")}
-                  className="rounded-lg border border-cyan-400/60 bg-cyan-400 px-3 py-2 text-xs font-semibold text-slate-950 transition duration-200 hover:-translate-y-0.5 hover:bg-cyan-300"
+                  className="rounded-lg border border-cyan-400/60 bg-cyan-400 px-3 py-2 text-xs font-semibold text-[var(--color-text)] transition duration-200 hover:-translate-y-0.5 hover:bg-cyan-300"
                 >
                   Start session
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate("/chat")}
-                  className="rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-3 py-2 text-xs font-semibold text-cyan-200 transition duration-200 hover:bg-cyan-500/25"
+                  className="rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-3 py-2 text-xs font-semibold text-[var(--color-text)] transition duration-200 hover:bg-cyan-500/25"
                 >
                   Chat with patient
                 </button>
                 <button
                   type="button"
                   onClick={() => navigate(`/doctor/${selectedDoctorPatient.uid}`)}
-                  className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-200 transition duration-200 hover:border-slate-500"
+                  className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-xs font-semibold text-[var(--color-text)] transition duration-200 hover:border-slate-500"
                 >
                   View profile
                 </button>
@@ -1113,11 +1113,11 @@ export default function Reports({ session }: { session: SessionUser }) {
         {selectedDoctorPatient ? (
           <section className="space-y-3 border-t border-slate-700/80 pt-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-slate-300">Submitted Reports</h3>
+              <h3 className="text-sm font-semibold uppercase tracking-[0.08em] text-[var(--color-text)]">Submitted Reports</h3>
               <button
                 type="button"
                 onClick={() => setSelectedPatientUid("")}
-                className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300 transition duration-200 hover:border-slate-500"
+                className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-semibold text-[var(--color-text)] transition duration-200 hover:border-slate-500"
               >
                 Back to patients
               </button>
@@ -1139,16 +1139,16 @@ export default function Reports({ session }: { session: SessionUser }) {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-100">{r.title}</p>
-                        <p className="mt-1 text-xs text-slate-400">{r.date} • {r.pages} pages • {r.type}</p>
+                        <p className="truncate text-sm font-semibold text-[var(--color-text)]">{r.title}</p>
+                        <p className="mt-1 text-xs text-[var(--color-text)]">{r.date} • {r.pages} pages • {r.type}</p>
                       </div>
                       <span
                         className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
                           r.workflowStatus === "Reviewed"
-                            ? "border border-emerald-500/40 bg-emerald-500/20 text-emerald-300"
+                            ? "border border-emerald-500/40 bg-emerald-500/20 text-[var(--color-text)]"
                             : r.workflowStatus === "Needs Attention"
-                              ? "border border-rose-500/45 bg-rose-500/20 text-rose-300"
-                              : "border border-amber-500/45 bg-amber-500/20 text-amber-300"
+                              ? "border border-rose-500/45 bg-rose-500/20 text-[var(--color-text)]"
+                              : "border border-amber-500/45 bg-amber-500/20 text-[var(--color-text)]"
                         }`}
                       >
                         {r.workflowStatus}
@@ -1162,7 +1162,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                           void handleViewReport(r);
                         }}
                         disabled={!r.fileUrl}
-                        className="rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-semibold text-slate-950 transition duration-200 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                        className="rounded-lg bg-cyan-400 px-3 py-1.5 text-xs font-semibold text-[var(--color-text)] transition duration-200 hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-[var(--color-text)]"
                       >
                         View Report
                       </button>
@@ -1170,7 +1170,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                         type="button"
                         onClick={() => handleExportReport(r)}
                         disabled={!r.fileUrl}
-                        className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 transition duration-200 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-lg border border-slate-600 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-[var(--color-text)] transition duration-200 hover:border-slate-500 disabled:cursor-not-allowed disabled:text-[var(--color-text)]"
                       >
                         Export
                       </button>
@@ -1179,7 +1179,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                         onClick={() =>
                           setOpenDoctorMenuForReportId((current) => (current === menuKey ? "" : menuKey))
                         }
-                        className="ml-auto rounded-lg border border-slate-700 px-2.5 py-1.5 text-slate-300 transition duration-200 hover:border-slate-500"
+                        className="ml-auto rounded-lg border border-slate-700 px-2.5 py-1.5 text-[var(--color-text)] transition duration-200 hover:border-slate-500"
                         aria-label="Open report actions"
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -1198,7 +1198,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                             void handleMarkReviewed(r);
                             setOpenDoctorMenuForReportId("");
                           }}
-                          className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-200 hover:bg-slate-800"
+                          className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-[var(--color-text)] hover:bg-slate-800"
                         >
                           Mark as reviewed
                         </button>
@@ -1208,7 +1208,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                             void handleRemoveReportRecord(r);
                             setOpenDoctorMenuForReportId("");
                           }}
-                          className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-rose-300 hover:bg-rose-500/10"
+                          className="w-full rounded-lg px-3 py-2 text-left text-xs font-medium text-[var(--color-text)] hover:bg-rose-500/10"
                         >
                           Remove report
                         </button>
@@ -1220,20 +1220,20 @@ export default function Reports({ session }: { session: SessionUser }) {
 
               {!doctorReportCards.length ? (
                 <div className="flex flex-col items-center justify-center rounded-xl border border-slate-700 bg-slate-900/60 p-8 text-center">
-                  <div className="mb-3 rounded-full border border-slate-700 bg-slate-800/80 p-3 text-slate-300">
+                  <div className="mb-3 rounded-full border border-slate-700 bg-slate-800/80 p-3 text-[var(--color-text)]">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                       <polyline points="14 2 14 8 20 8" />
                     </svg>
                   </div>
-                  <p className="text-sm font-semibold text-slate-200">No reports yet</p>
-                  <p className="mt-1 text-xs text-slate-400">This patient has not uploaded reports yet.</p>
+                  <p className="text-sm font-semibold text-[var(--color-text)]">No reports yet</p>
+                  <p className="mt-1 text-xs text-[var(--color-text)]">This patient has not uploaded reports yet.</p>
                 </div>
               ) : null}
             </div>
           </section>
         ) : (
-          <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-6 text-sm text-slate-400">
+          <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-6 text-sm text-[var(--color-text)]">
             Select a patient to review reports.
           </div>
         )}
@@ -1275,7 +1275,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                 </div>
                 Assigned Patients
               </div>
-              <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+              <span style={{ fontSize: "12px", color: "var(--color-text)" }}>
                 {filteredAssignedPatients.length} of {assignedPatients.length} patients
               </span>
             </div>
@@ -1292,7 +1292,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                     borderRadius: "8px",
                     border: "1px solid var(--border)",
                     background: "var(--surface)",
-                    color: "var(--text-primary)",
+                    color: "var(--color-text)",
                     padding: "0 12px",
                     fontSize: "13px",
                     fontWeight: 600,
@@ -1321,7 +1321,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                       <div
                         style={{
                           fontSize: "13px",
-                          color: "var(--text-muted)",
+                          color: "var(--color-text)",
                           marginTop: "4px",
                           fontWeight: 600,
                         }}
@@ -1359,13 +1359,13 @@ export default function Reports({ session }: { session: SessionUser }) {
                   </div>
                 ))}
                 {!filteredAssignedPatients.length ? (
-                  <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                  <div style={{ fontSize: "12px", color: "var(--color-text)" }}>
                     No patients match your search.
                   </div>
                 ) : null}
               </div>
             ) : (
-              <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+              <div style={{ fontSize: "12px", color: "var(--color-text)" }}>
                 No patients have selected you yet.
               </div>
             )}
@@ -1397,7 +1397,7 @@ export default function Reports({ session }: { session: SessionUser }) {
             <div
               style={{
                 fontSize: "11px",
-                color: "var(--text-muted)",
+                color: "var(--color-text)",
                 fontWeight: 600,
                 textTransform: "uppercase",
                 letterSpacing: ".05em",
@@ -1436,7 +1436,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                 ? `${selectedDoctorPatient.displayName} — Submitted Reports`
                 : "Recent Reports"}
             </div>
-            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+            <span style={{ fontSize: "12px", color: "var(--color-text)" }}>
               {query
                 ? `${filteredReports.length} of ${reports.length} reports`
                 : `${reports.length} reports`}
@@ -1452,7 +1452,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                   borderRadius: "8px",
                   border: "1px solid var(--border)",
                   background: "transparent",
-                  color: "var(--text-secondary)",
+                  color: "var(--color-text)",
                   fontSize: "11px",
                   fontWeight: 700,
                   cursor: "pointer",
@@ -1492,7 +1492,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                   <div
                     style={{
                       fontSize: "11px",
-                      color: "var(--text-muted)",
+                      color: "var(--color-text)",
                       marginTop: "2px",
                     }}
                   >
@@ -1520,7 +1520,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                   className="report-row-pages"
                   style={{
                     fontSize: "12px",
-                    color: "var(--text-muted)",
+                    color: "var(--color-text)",
                     textAlign: "center",
                   }}
                 >
@@ -1568,7 +1568,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                         borderRadius: "6px",
                         border: "1px solid var(--border)",
                         background: "transparent",
-                        color: "var(--text-secondary)",
+                        color: "var(--color-text)",
                         fontSize: "11px",
                         fontWeight: 600,
                         cursor: "pointer",
@@ -1587,7 +1587,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                         borderRadius: "6px",
                         border: "1px solid var(--border)",
                         background: "transparent",
-                        color: "var(--text-muted)",
+                        color: "var(--color-text)",
                         fontSize: "11px",
                         fontWeight: 600,
                         cursor: "not-allowed",
@@ -1673,7 +1673,7 @@ export default function Reports({ session }: { session: SessionUser }) {
               </div>
             ))}
             {!filteredReports.length ? (
-              <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+              <div style={{ fontSize: "12px", color: "var(--color-text)" }}>
                 No reports submitted by this patient yet.
               </div>
             ) : null}
@@ -1723,7 +1723,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                       borderRadius: "999px",
                       border: "1px solid var(--border)",
                       background: "transparent",
-                      color: "var(--text-secondary)",
+                      color: "var(--color-text)",
                       cursor: "pointer",
                       fontWeight: 700,
                     }}
@@ -1746,7 +1746,7 @@ export default function Reports({ session }: { session: SessionUser }) {
                     borderRadius: "8px",
                     border: "1px solid var(--border)",
                     background: "var(--surface)",
-                    color: "var(--text-primary)",
+                    color: "var(--color-text)",
                     padding: "0 12px",
                     fontSize: "12px",
                     fontWeight: 600,
@@ -1822,12 +1822,12 @@ export default function Reports({ session }: { session: SessionUser }) {
                   {uploading ? "Uploading..." : "Confirm and Upload"}
                 </button>
 
-                <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                <div style={{ fontSize: "11px", color: "var(--color-text)" }}>
                   Allowed files: PDF, JPG, PNG (max 10MB)
                 </div>
 
                 {uploadMessage ? (
-                  <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                  <div style={{ fontSize: "12px", color: "var(--color-text)" }}>
                     {uploadMessage}
                   </div>
                 ) : null}
@@ -1852,7 +1852,7 @@ export default function Reports({ session }: { session: SessionUser }) {
               borderRadius: "999px",
               border: "1px solid rgba(34,211,238,.35)",
               background: "linear-gradient(135deg, #22d3ee, #0ea5e9)",
-              color: "#06202a",
+              color: "var(--color-text)",
               cursor: "pointer",
               fontSize: "26px",
               fontWeight: 700,

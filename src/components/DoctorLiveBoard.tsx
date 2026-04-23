@@ -445,13 +445,13 @@ export default function DoctorLiveBoard() {
                                     borderRadius: '999px',
                                     padding: '8px 12px',
                                     fontSize: '12px',
-                                    color: 'var(--text-secondary)',
+                                    color: "var(--color-text)",
                                 }}
                             >
-                                <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                                <span style={{ fontWeight: 700, color: "var(--color-text)" }}>
                                     {patientLabel(patient.displayName, patient.uid)}
                                 </span>
-                                <span style={{ marginLeft: '8px', fontFamily: 'var(--mono)', color: 'var(--text-muted)' }}>
+                                <span style={{ marginLeft: '8px', fontFamily: 'var(--mono)', color: "var(--color-text)" }}>
                                     {patient.uid.slice(0, 8)}...
                                 </span>
                             </div>
@@ -465,7 +465,7 @@ export default function DoctorLiveBoard() {
                     <div className="card-title">Live Monitoring Board</div>
                     <div className="doctor-live-meta">
                         <span className="mini-tag tag-live">{activeCount} Active</span>
-                        <span className="mini-tag" style={{ background: 'rgba(248,113,113,.12)', color: '#fca5a5' }}>
+                        <span className="mini-tag" style={{ background: 'rgba(248,113,113,.12)', color: "var(--color-text)" }}>
                             {criticalCount} Critical
                         </span>
                     </div>

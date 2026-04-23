@@ -5,6 +5,7 @@ import {
   listenMessages,
 } from "../services/chatService";
 import MessageBubble from "./MessageBubble";
+import Loader from "./Loader";
 import "../styles/chat.css";
 
 interface Message {
@@ -142,7 +143,7 @@ const ChatScreen = ({
           </div>
         </div>
         <div className="chat-screen-loading">
-          <div className="loading-spinner"></div>
+          <Loader />
           <p>Loading messages...</p>
         </div>
       </div>

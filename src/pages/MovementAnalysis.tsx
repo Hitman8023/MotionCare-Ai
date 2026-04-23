@@ -90,7 +90,6 @@ export default function MovementAnalysis() {
         { name: 'Radial Deviation', current: 15, target: 4, unit: 'deg' },
         { name: 'Ulnar Deviation', current: -22, target: -4, unit: 'deg' },
     ];
-    ];
 
     const sessions = [
         { date: 'Today', rom: 42, accuracy: 87, reps: 24 },
@@ -203,7 +202,7 @@ export default function MovementAnalysis() {
                     </div>
                     <div style={{ marginTop: '18px', paddingTop: '14px', borderTop: '1px solid var(--border-light)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                            <span style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '.07em', color: 'var(--text-muted)', fontWeight: 700 }}>
+                            <span style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '.07em', color: "var(--color-text)", fontWeight: 700 }}>
                                 Exercise Contribution Today
                             </span>
                             <strong style={{ fontSize: '12px', color: 'var(--teal)' }}>
@@ -222,8 +221,8 @@ export default function MovementAnalysis() {
                                     <div key={exercise} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: '10px', alignItems: 'center' }}>
                                         <div>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
-                                                <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{EXERCISE_LABELS[exercise]}</span>
-                                                <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--mono)', fontSize: '11px' }}>{share}%</span>
+                                                <span style={{ color: "var(--color-text)", fontWeight: 600 }}>{EXERCISE_LABELS[exercise]}</span>
+                                                <span style={{ color: "var(--color-text)", fontFamily: 'var(--mono)', fontSize: '11px' }}>{share}%</span>
                                             </div>
                                             <div style={{ height: '6px', background: 'rgba(148,163,184,.15)', borderRadius: '999px', overflow: 'hidden' }}>
                                                 <div
@@ -237,7 +236,7 @@ export default function MovementAnalysis() {
                                                 />
                                             </div>
                                         </div>
-                                        <strong style={{ fontSize: '12px', color: 'var(--text-primary)', minWidth: '58px', textAlign: 'right' }}>
+                                        <strong style={{ fontSize: '12px', color: "var(--color-text)", minWidth: '58px', textAlign: 'right' }}>
                                             {reps} reps
                                         </strong>
                                     </div>

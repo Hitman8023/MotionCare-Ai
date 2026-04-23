@@ -179,7 +179,7 @@ export default function PatientHistory() {
               </div>
               Patient Registry
             </div>
-            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+            <span style={{ fontSize: "12px", color: "var(--color-text)" }}>
               {query
                 ? `${filteredPatients.length} of ${patientRows.length} patients`
                 : `${patientRows.length} patients`}
@@ -235,7 +235,7 @@ export default function PatientHistory() {
                   <div
                     style={{
                       fontSize: "12px",
-                      color: "var(--text-muted)",
+                      color: "var(--color-text)",
                       marginTop: "2px",
                     }}
                   >
@@ -273,7 +273,7 @@ export default function PatientHistory() {
                   <div
                     style={{
                       fontSize: "10px",
-                      color: "var(--text-muted)",
+                      color: "var(--color-text)",
                       fontWeight: 600,
                       textTransform: "uppercase",
                       letterSpacing: ".05em",
@@ -287,7 +287,7 @@ export default function PatientHistory() {
                     style={{
                       fontSize: "18px",
                       fontWeight: 800,
-                      color: "var(--text-primary)",
+                      color: "var(--color-text)",
                     }}
                   >
                     {p.sessions}
@@ -295,7 +295,7 @@ export default function PatientHistory() {
                   <div
                     style={{
                       fontSize: "10px",
-                      color: "var(--text-muted)",
+                      color: "var(--color-text)",
                       fontWeight: 600,
                       textTransform: "uppercase",
                       letterSpacing: ".05em",
@@ -387,7 +387,7 @@ export default function PatientHistory() {
                         <span
                           style={{
                             fontSize: "11px",
-                            color: "var(--text-muted)",
+                            color: "var(--color-text)",
                             fontFamily: "var(--mono)",
                           }}
                         >
@@ -399,7 +399,7 @@ export default function PatientHistory() {
                 );
               })
             ) : (
-              <div style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+              <div style={{ fontSize: "12px", color: "var(--color-text)" }}>
                 No timeline events yet. Live data will populate this feed.
               </div>
             )}

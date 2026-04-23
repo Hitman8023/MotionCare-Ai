@@ -21,7 +21,7 @@ export default function SimulationViewer({
         border: "1px solid rgba(34,211,238,.25)",
         background:
           "radial-gradient(circle at 30% 20%, rgba(34,211,238,.22), rgba(15,23,42,.6) 65%)",
-        color: "var(--text-primary)",
+        color: "var(--color-text)",
         ...style,
       }}
       aria-label="Hand simulation preview"

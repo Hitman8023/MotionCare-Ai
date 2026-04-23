@@ -17,8 +17,8 @@ load_dotenv(BACKEND_DIR / ".env")
 load_dotenv(PROJECT_ROOT / ".env")
 load_dotenv(PROJECT_ROOT / ".env.local")
 
-API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY")
-DEFAULT_MODEL = os.getenv("GEMINI_MODEL") or os.getenv("VITE_LLM_MODEL") or "gemini-2.5-flash"
+API_KEY = (os.getenv("GEMINI_API_KEY") or os.getenv("VITE_GEMINI_API_KEY") or "").strip()
+DEFAULT_MODEL = (os.getenv("GEMINI_MODEL") or os.getenv("VITE_LLM_MODEL") or "gemini-2.5-flash").strip()
 
 if not API_KEY:
     raise RuntimeError("GEMINI_API_KEY is missing. Add it to backend/.env or environment variables.")
@@ -69,7 +69,14 @@ def generate_text(payload: GenerateRequest) -> GenerateResponse:
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Gemini request failed: {exc}") from exc
+        error_text = str(exc)
+        if "API_KEY_INVALID" in error_text or "API key not valid" in error_text:
+            raise HTTPException(
+                status_code=401,
+                detail="Gemini API key is invalid. Update GEMINI_API_KEY in backend/.env or root .env.local.",
+            ) from exc
+
+        raise HTTPException(status_code=500, detail=f"Gemini request failed: {error_text}") from exc
 
 
 # Run with:

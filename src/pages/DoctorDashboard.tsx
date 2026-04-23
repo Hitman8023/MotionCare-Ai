@@ -468,7 +468,7 @@ export default function DoctorDashboard() {
                 className="mini-tag"
                 style={{
                   background: "rgba(248,113,113,.14)",
-                  color: "#fca5a5",
+                  color: "var(--color-text)",
                   borderColor: "rgba(248,113,113,.25)",
                 }}
               >
