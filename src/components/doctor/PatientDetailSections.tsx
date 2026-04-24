@@ -250,7 +250,10 @@ export function DietSection({
         {recentDietLogs.length ? (
           recentDietLogs.map((entry) => {
             const completedMeals = Object.values(entry.meals).filter((meal) => meal.completed).length;
-            const extrasCount = Object.values(entry.meals).filter((meal) => meal.extras.trim().length > 0).length;
+            const extrasCount = Object.values(entry.meals).reduce(
+              (sum, meal) => sum + meal.extras.length,
+              0,
+            );
 
             return (
               <div key={entry.date} className="doctor-diet-log-row">

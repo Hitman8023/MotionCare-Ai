@@ -44,7 +44,7 @@ export function computeDietMetricsFromLogs(
   const junkCount = logs.reduce((sum, log) => {
     return (
       sum +
-      DIET_MEAL_ORDER.filter((meal) => log.meals[meal]?.extras.trim().length > 0).length
+      DIET_MEAL_ORDER.filter((meal) => (log.meals[meal]?.extras.length ?? 0) > 0).length
     );
   }, 0);
 
@@ -99,9 +99,22 @@ function normalizeLog(patientId: string, date: string, raw: unknown): DietLogDoc
     if (!rawMeal || typeof rawMeal !== "object") continue;
 
     const mealData = rawMeal as { completed?: unknown; extras?: unknown };
+    const extrasRaw = mealData.extras;
+    const extras = Array.isArray(extrasRaw)
+      ? extrasRaw
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : typeof extrasRaw === "string"
+        ? extrasRaw
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean)
+        : [];
+
     base.meals[meal] = {
       completed: Boolean(mealData.completed),
-      extras: typeof mealData.extras === "string" ? mealData.extras : "",
+      extras,
     };
   }
 
@@ -191,13 +204,22 @@ export async function saveDietLog(input: {
   meals: DietLogDoc["meals"];
 }): Promise<void> {
   const now = new Date().toISOString();
+  const meals = DIET_MEAL_ORDER.reduce((acc, meal) => {
+    acc[meal] = {
+      completed: Boolean(input.meals[meal]?.completed),
+      extras: (input.meals[meal]?.extras ?? [])
+        .map((item) => item.trim())
+        .filter(Boolean),
+    };
+    return acc;
+  }, {} as DietLogDoc["meals"]);
 
   await setDoc(
     doc(db, "dietLogs", input.patientId, "days", input.date),
     {
       patientId: input.patientId,
       date: input.date,
-      meals: input.meals,
+      meals,
       updatedAt: now,
     },
     { merge: true },

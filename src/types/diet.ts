@@ -19,7 +19,7 @@ export type DietPlanDoc = {
 
 export type DietMealLog = {
   completed: boolean;
-  extras: string;
+  extras: string[];
 };
 
 export type DietLogDoc = {
@@ -52,10 +52,10 @@ export function createEmptyDietLog(patientId: string, date: string): DietLogDoc 
     date,
     updatedAt: new Date().toISOString(),
     meals: {
-      breakfast: { completed: false, extras: "" },
-      lunch: { completed: false, extras: "" },
-      dinner: { completed: false, extras: "" },
-      snacks: { completed: false, extras: "" },
+      breakfast: { completed: false, extras: [] },
+      lunch: { completed: false, extras: [] },
+      dinner: { completed: false, extras: [] },
+      snacks: { completed: false, extras: [] },
     },
   };
 }
