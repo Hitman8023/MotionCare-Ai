@@ -2,10 +2,18 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
-import EstimationForm from "../components/EstimationForm";
 import Loader from "../components/Loader";
 import { getDoctorEstimation } from "../services/estimationService";
+import { useDietLogs } from "../hooks/useDietLogs";
+import { useDietMetrics } from "../hooks/useDietMetrics";
+import { useDietPlan } from "../hooks/useDietPlan";
 import type { DoctorEstimation } from "../types/estimation";
+import {
+  DietSection,
+  PatientDetailHeader,
+  PatientInfoCard,
+  RecoveryEstimationCard,
+} from "../components/doctor/PatientDetailSections";
 
 type PatientData = {
   uid: string;
@@ -31,6 +39,9 @@ export default function PatientDetailPage({ doctorId }: { doctorId: string }) {
   const [estimation, setEstimation] = useState<DoctorEstimation | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { plan, loading: planLoading } = useDietPlan(patientId);
+  const { metrics, recompute, syncing } = useDietMetrics(patientId);
+  const { logs: recentDietLogs } = useDietLogs(patientId, 7);
 
   useEffect(() => {
     const fetchPatientData = async () => {
@@ -160,180 +171,45 @@ export default function PatientDetailPage({ doctorId }: { doctorId: string }) {
   }
 
   return (
-    <div>
-      {/* Header */}
-      <div className="page-header">
-        <button
-          onClick={() => navigate("/patients")}
-          style={{
-            background: "none",
-            border: "none",
-            color: "var(--teal)",
-            cursor: "pointer",
-            fontSize: "14px",
-            fontWeight: 600,
-            marginBottom: "8px",
-          }}
-        >
-          ← Back to Patients
-        </button>
-        <div className="page-title">{patient.displayName || "Patient"}</div>
-        <div className="page-subtitle">View patient profile and provide recovery estimation</div>
-      </div>
+    <div className="doctor-detail-page">
+      <button
+        onClick={() => navigate("/patients")}
+        className="doctor-back-button"
+      >
+        ← Back to Patients
+      </button>
 
-      {/* Main Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
-        {/* Left: Patient Information */}
-        <div>
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title">Patient Information</div>
-            </div>
+      <PatientDetailHeader patient={patient} />
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              {/* Basic Info */}
-              <div style={{ padding: "12px", borderRadius: "8px", background: "rgba(148,163,184,.05)" }}>
-                <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--color-text)", textTransform: "uppercase", marginBottom: "8px" }}>
-                  Basic Information
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Age</div>
-                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text)" }}>
-                      {patient.age || "—"}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Gender</div>
-                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text)" }}>
-                      {patient.gender || "—"}
-                    </div>
-                  </div>
-                  <div style={{ gridColumn: "1 / -1" }}>
-                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Phone</div>
-                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text)" }}>
-                      {patient.phone || "—"}
-                    </div>
-                  </div>
-                </div>
-              </div>
+      <div className="doctor-detail-grid">
+        <div className="doctor-detail-left-column">
+          <PatientInfoCard patient={patient} />
 
-              {/* Medical History */}
-              <div style={{ padding: "12px", borderRadius: "8px", background: "rgba(148,163,184,.05)" }}>
-                <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--color-text)", textTransform: "uppercase", marginBottom: "8px" }}>
-                  Medical History
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Incident Type</div>
-                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text)" }}>
-                      {patient.incidentType || "—"}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Condition</div>
-                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text)" }}>
-                      {patient.condition || "—"}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Current Stage</div>
-                    <div style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text)" }}>
-                      {patient.stage || "—"}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Medications</div>
-                    <div style={{ fontSize: "13px", color: "var(--color-text)", lineHeight: 1.5 }}>
-                      {patient.medications || "—"}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Allergies</div>
-                    <div style={{ fontSize: "13px", color: "var(--color-text)", lineHeight: 1.5 }}>
-                      {patient.allergies || "—"}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Incident Description */}
-              <div style={{ padding: "12px", borderRadius: "8px", background: "rgba(148,163,184,.05)" }}>
-                <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--color-text)", textTransform: "uppercase", marginBottom: "8px" }}>
-                  Incident Details
-                </div>
-                <div style={{ fontSize: "13px", color: "var(--color-text)", lineHeight: 1.6 }}>
-                  {patient.incidentDescription || "No description provided"}
-                </div>
-              </div>
-            </div>
-          </div>
+          <RecoveryEstimationCard
+            patientId={patientId!}
+            doctorId={doctorId}
+            estimation={estimation}
+            onRefreshEstimation={() => {
+              getDoctorEstimation(patientId!, doctorId).then((est) => {
+                if (est) setEstimation(est);
+              });
+            }}
+          />
         </div>
 
-        {/* Right: Recovery Estimation Form */}
-        <div>
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title">Recovery Time Estimation</div>
-            </div>
-
-            {estimation && (
-              <div style={{
-                padding: "12px",
-                borderRadius: "8px",
-                background: "rgba(34, 211, 238, 0.06)",
-                border: "1px solid rgba(34, 211, 238, 0.15)",
-                marginBottom: "16px",
-              }}>
-                <div style={{ fontSize: "11px", fontWeight: 700, color: "var(--color-text)", textTransform: "uppercase", marginBottom: "8px" }}>
-                  Current Estimation
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Range</div>
-                    <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--color-text)" }}>
-                      Week {estimation.minWeeks}–{estimation.maxWeeks}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: "11px", color: "var(--color-text)" }}>Confidence</div>
-                    <div style={{ fontSize: "16px", fontWeight: 700, color: "var(--color-text)" }}>
-                      {estimation.confidence}%
-                    </div>
-                  </div>
-                </div>
-                {estimation.notes && (
-                  <div>
-                    <div style={{ fontSize: "11px", color: "var(--color-text)", marginBottom: "4px" }}>Notes</div>
-                    <div style={{ fontSize: "12px", color: "var(--color-text)" }}>
-                      {estimation.notes}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <EstimationForm
-              patientId={patientId!}
-              doctorId={doctorId}
-              onSaved={() => {
-                // Refresh estimation
-                getDoctorEstimation(patientId!, doctorId).then((est) => {
-                  if (est) setEstimation(est);
-                });
-              }}
-              initialData={
-                estimation
-                  ? {
-                      minWeeks: estimation.minWeeks,
-                      maxWeeks: estimation.maxWeeks,
-                      confidence: estimation.confidence,
-                      notes: estimation.notes || "",
-                    }
-                  : undefined
-              }
-            />
-          </div>
+        <div className="doctor-detail-right-column">
+          <DietSection
+            patientId={patientId!}
+            doctorId={doctorId}
+            planMeals={plan?.meals}
+            loading={planLoading}
+            metrics={metrics}
+            syncing={syncing}
+            recentDietLogs={recentDietLogs}
+            onRecomputeMetrics={() => {
+              void recompute();
+            }}
+          />
         </div>
       </div>
     </div>

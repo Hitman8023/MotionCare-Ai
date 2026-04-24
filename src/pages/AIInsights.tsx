@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { collection, getDocs, query, where } from 'firebase/firestore';
 import { auth, db } from '../firebase';
+import PatientDietTracker from '../components/PatientDietTracker';
 import type { ExerciseType } from '../services/exerciseDetection';
 import { getDoctorEstimation } from '../services/estimationService';
 import { askRecoveryAssistantWithGemini } from '../services/geminiRecoveryAssistant';
+import { useDietMetrics } from '../hooks/useDietMetrics';
 import {
     computeAccuracy,
     computeFlexRange,
@@ -190,20 +192,18 @@ export default function AIInsights() {
     const llmRequestIdRef = useRef(0);
     const [doctorEstimation, setDoctorEstimation] = useState<DoctorEstimation | null>(null);
     const [refreshing, setRefreshing] = useState(false);
-    const [dietExpanded, setDietExpanded] = useState(false);
     const [patientUid, setPatientUid] = useState<string | null>(null);
     const [currentDateKey, setCurrentDateKey] = useState<string>(() => getLocalDateKey());
     const [latestSample, setLatestSample] = useState<SensorSample | null>(null);
     const [sampleHistory, setSampleHistory] = useState<SensorSample[]>([]);
     const [exerciseStats, setExerciseStats] = useState<ExerciseWeeklyStats>(() => createEmptyExerciseStats());
-    const [dietLog, setDietLog] = useState<DailyDietLog>(() => createEmptyDietLog(getLocalDateKey()));
-    const [dietReady, setDietReady] = useState(false);
     const [llmSections, setLlmSections] = useState<LlmSections | null>(null);
     const [llmLoading, setLlmLoading] = useState(false);
     const [llmError, setLlmError] = useState<string | null>(null);
     const [llmUpdatedAt, setLlmUpdatedAt] = useState<string | null>(null);
 
     const storageUid = patientUid ?? auth.currentUser?.uid ?? 'local';
+    const { metrics: dietMetrics } = useDietMetrics(patientUid ?? undefined);
 
     const fetchEstimation = async () => {
         const user = auth.currentUser;
@@ -274,8 +274,6 @@ export default function AIInsights() {
 
     useEffect(() => {
         setExerciseStats(summarizeWeeklyExerciseStats(storageUid));
-        setDietLog(readDietLog(storageUid, currentDateKey));
-        setDietReady(true);
     }, [storageUid, currentDateKey]);
 
     useEffect(() => {
@@ -288,14 +286,16 @@ export default function AIInsights() {
         return () => clearInterval(interval);
     }, [storageUid]);
 
-    useEffect(() => {
-        if (!dietReady) return;
-        writeDietLog(storageUid, dietLog);
-    }, [storageUid, dietLog, dietReady]);
-
     const dietSummary = useMemo(
-        () => summarizeWeeklyDiet(storageUid, currentDateKey, dietLog),
-        [storageUid, currentDateKey, dietLog],
+        () => ({
+            todayScore: dietMetrics?.adherenceScore ?? 0,
+            todayCompletionRate: dietMetrics?.adherenceScore ?? 0,
+            weeklyScore: dietMetrics?.weeklyConsistency ?? 0,
+            junkMeals: dietMetrics?.junkCount ?? 0,
+            outsideMeals: dietMetrics?.junkCount ?? 0,
+            loggedDays: dietMetrics ? 7 : 0,
+        }),
+        [dietMetrics],
     );
 
     const dynamicMetrics = useMemo(
@@ -305,11 +305,8 @@ export default function AIInsights() {
                 sampleHistory,
                 exerciseStats,
                 dietSummary,
-                storageUid,
-                currentDateKey,
-                dietLog,
             ),
-        [latestSample, sampleHistory, exerciseStats, dietSummary, storageUid, currentDateKey, dietLog],
+        [latestSample, sampleHistory, exerciseStats, dietSummary],
     );
 
     const modelAlignment = useMemo(() => {
@@ -453,66 +450,18 @@ export default function AIInsights() {
     };
 
     useEffect(() => {
-        if (!dietReady) return;
         void generateLlmSections();
-    }, [dietReady, storageUid, currentDateKey]);
+    }, [storageUid, currentDateKey, dietSummary.todayScore, dietSummary.weeklyScore]);
 
     const handleRefresh = async () => {
         setRefreshing(true);
         try {
             await fetchEstimation();
             setExerciseStats(summarizeWeeklyExerciseStats(storageUid));
-            setDietLog(readDietLog(storageUid, currentDateKey));
             await generateLlmSections();
         } finally {
             setRefreshing(false);
         }
-    };
-
-    const toggleMealItem = (mealType: MealType, item: string) => {
-        setDietLog((prev) => {
-            const current = prev.meals[mealType];
-            const nextItems = current.selectedItems.includes(item)
-                ? current.selectedItems.filter((value) => value !== item)
-                : [...current.selectedItems, item];
-
-            return {
-                ...prev,
-                meals: {
-                    ...prev.meals,
-                    [mealType]: {
-                        ...current,
-                        selectedItems: nextItems,
-                    },
-                },
-            };
-        });
-    };
-
-    const updateOutsideItems = (mealType: MealType, value: string) => {
-        setDietLog((prev) => ({
-            ...prev,
-            meals: {
-                ...prev.meals,
-                [mealType]: {
-                    ...prev.meals[mealType],
-                    outsideItems: value,
-                },
-            },
-        }));
-    };
-
-    const toggleJunk = (mealType: MealType) => {
-        setDietLog((prev) => ({
-            ...prev,
-            meals: {
-                ...prev.meals,
-                [mealType]: {
-                    ...prev.meals[mealType],
-                    includesJunk: !prev.meals[mealType].includesJunk,
-                },
-            },
-        }));
     };
 
     return (
@@ -709,124 +658,13 @@ export default function AIInsights() {
             </div>
 
             <div className="section">
-                <section className="card aii-diet-panel">
-                    <div className="card-header">
-                        <div className="card-title">
-                            <div className="card-title-icon aii-feed-icon">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M11 2v20" />
-                                    <path d="M18 6c0-2.2-1.8-4-4-4H6v20h8c2.2 0 4-1.8 4-4V6z" />
-                                </svg>
-                            </div>
-                            Recovery Diet Plan (Track What You Ate)
-                        </div>
-                        <div className="aii-diet-actions">
-                            <div className="aii-badge">Today {dietSummary.todayScore}%</div>
-                            <button
-                                type="button"
-                                className="aii-toggle-btn"
-                                onClick={() => setDietExpanded((prev) => !prev)}
-                            >
-                                {dietExpanded ? 'Hide tracker' : 'Open tracker'}
-                            </button>
-                        </div>
-                    </div>
-
-                    <p className="aii-diet-intro">
-                        Use the summary below for quick review. Open tracker only when you want to log
-                        meals, outside-plan items, or junk intake.
-                    </p>
-
-                    <div className="aii-diet-summary-grid">
-                        <div className="aii-diet-kpi">
-                            <p>Today plan completion</p>
-                            <strong>{dietSummary.todayCompletionRate}%</strong>
-                        </div>
-                        <div className="aii-diet-kpi">
-                            <p>Weekly diet consistency</p>
-                            <strong>{dietSummary.weeklyScore}%</strong>
-                        </div>
-                        <div className="aii-diet-kpi">
-                            <p>Junk meals this week</p>
-                            <strong>{dietSummary.junkMeals}</strong>
-                        </div>
-                        <div className="aii-diet-kpi">
-                            <p>Projected delay impact</p>
-                            <strong>{dynamicMetrics.delayDays} day(s)</strong>
-                        </div>
-                    </div>
-
-                    {dietExpanded ? (
-                        <div className="aii-diet-grid">
-                            {MEAL_ORDER.map((mealType) => {
-                                const plan = DIET_PLAN[mealType];
-                                const mealLog = dietLog.meals[mealType];
-
-                                return (
-                                    <article key={mealType} className="aii-meal-card">
-                                        <div className="aii-meal-head">
-                                            <h4 className="aii-meal-title">{plan.title}</h4>
-                                            <div className="aii-meal-head-meta">
-                                                <span className="aii-meal-time">{plan.time}</span>
-                                                <span className="aii-meal-progress">
-                                                    {mealLog.selectedItems.length}/{plan.items.length} done
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        <div className="aii-meal-list" role="group" aria-label={`${plan.title} plan items`}>
-                                            {plan.items.map((item) => (
-                                                <button
-                                                    key={item}
-                                                    type="button"
-                                                    className={`aii-meal-chip${mealLog.selectedItems.includes(item) ? ' is-selected' : ''}`}
-                                                    onClick={() => toggleMealItem(mealType, item)}
-                                                    aria-pressed={mealLog.selectedItems.includes(item)}
-                                                >
-                                                    <span className="aii-meal-chip-indicator" aria-hidden="true">
-                                                        {mealLog.selectedItems.includes(item) ? '✓' : '+'}
-                                                    </span>
-                                                    <span>{item}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-
-                                        <label className="aii-outside-label">
-                                            Outside of plan
-                                            <textarea
-                                                className="aii-outside-input"
-                                                placeholder="Example: burger, sweets, fried snacks"
-                                                value={mealLog.outsideItems}
-                                                onChange={(event) =>
-                                                    updateOutsideItems(mealType, event.target.value)
-                                                }
-                                            />
-                                        </label>
-
-                                        <button
-                                            type="button"
-                                            className={`aii-junk-toggle${mealLog.includesJunk ? ' is-on' : ''}`}
-                                            onClick={() => toggleJunk(mealType)}
-                                            aria-pressed={mealLog.includesJunk}
-                                        >
-                                            <span className="aii-junk-track" aria-hidden="true">
-                                                <span className="aii-junk-thumb" />
-                                            </span>
-                                            <span className="aii-junk-text">
-                                                {mealLog.includesJunk ? 'Includes junk food' : 'No junk food logged'}
-                                            </span>
-                                        </button>
-                                    </article>
-                                );
-                            })}
-                        </div>
-                    ) : (
-                        <p className="aii-diet-collapsed-note">
-                            Tracker is collapsed to keep this page clean. Open tracker when you want to
-                            log today&apos;s meals.
-                        </p>
-                    )}
-                </section>
+                {patientUid ? (
+                    <PatientDietTracker patientId={patientUid} dateKey={currentDateKey} />
+                ) : (
+                    <section className="card aii-diet-panel">
+                        <p className="aii-diet-collapsed-note">Sign in as a patient to use diet tracking.</p>
+                    </section>
+                )}
             </div>
         </div>
     );
@@ -1148,9 +986,6 @@ function buildDynamicMetrics(
     sampleHistory: SensorSample[],
     exerciseStats: ExerciseWeeklyStats,
     dietSummary: WeeklyDietSummary,
-    storageUid: string,
-    currentDateKey: string,
-    dietLog: DailyDietLog,
 ): DynamicMetrics {
     const scoreSeries = sampleHistory.map((sample) => computeRecoveryScore(sample));
     const recentScore = scoreSeries.length
@@ -1173,9 +1008,6 @@ function buildDynamicMetrics(
     const alertCount = latestSample ? detectAlertCount(latestSample) : 0;
 
     const forecastSeries = buildForecastTimeSeries(
-        storageUid,
-        currentDateKey,
-        dietLog,
         recentScore,
         exerciseStats,
         dietSummary,
@@ -1238,9 +1070,6 @@ function buildDynamicMetrics(
 }
 
 function buildForecastTimeSeries(
-    storageUid: string,
-    currentDateKey: string,
-    todayDietLog: DailyDietLog,
     todayRecoveryScore: number,
     exerciseStats: ExerciseWeeklyStats,
     dietSummary: WeeklyDietSummary,
@@ -1254,15 +1083,18 @@ function buildForecastTimeSeries(
         const rawRepMap =
             typeof window === 'undefined'
                 ? null
-                : window.localStorage.getItem(getDailyRepStorageKey(storageUid, dateKey));
+                : window.localStorage.getItem(getDailyRepStorageKey('local', dateKey));
         const repMap = parseRepMap(rawRepMap);
         const repsTotal = sumExerciseReps(repMap);
 
-        const dayDietLog = dateKey === currentDateKey
-            ? todayDietLog
-            : readDietLog(storageUid, dateKey);
-        const dayDietSummary = summarizeDietDay(dayDietLog);
-        const dailyVitals = readDailyVitalsAggregate(storageUid, dateKey);
+        const dayDietSummary: DietDaySummary = {
+            touched: true,
+            score: dietSummary.weeklyScore,
+            completionRate: dietSummary.todayCompletionRate,
+            junkMeals: dietSummary.junkMeals,
+            outsideMeals: dietSummary.outsideMeals,
+        };
+        const dailyVitals = readDailyVitalsAggregate('local', dateKey);
         const hasVitalSignal = dailyVitals !== null && dailyVitals.sampleCount > 0;
         const hasExerciseSignal = repsTotal > 0;
         const hasDietSignal = dayDietSummary.touched;

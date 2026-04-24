@@ -5407,6 +5407,372 @@ svg.sparkline {
   color: #fecaca;
 }
 
+.doctor-detail-page {
+  display: grid;
+  gap: 22px;
+}
+
+.doctor-back-button {
+  width: fit-content;
+  background: none;
+  border: none;
+  color: var(--teal);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 0;
+}
+
+.doctor-detail-header-card {
+  padding: 22px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(15, 23, 42, 0.86));
+  box-shadow: 0 24px 70px rgba(2, 6, 23, 0.18);
+}
+
+.doctor-detail-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.doctor-detail-header-kicker {
+  display: inline-flex;
+  margin-bottom: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--teal);
+  background: rgba(34, 211, 238, 0.12);
+}
+
+.doctor-detail-header-title {
+  margin: 0;
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+.doctor-detail-header-copy {
+  margin: 10px 0 0;
+  max-width: 68ch;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.doctor-detail-header-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.doctor-detail-pill {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.45);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.doctor-detail-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.doctor-detail-summary-card {
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.doctor-detail-summary-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.doctor-detail-summary-value {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.doctor-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.doctor-detail-left-column,
+.doctor-detail-right-column {
+  display: grid;
+  gap: 20px;
+}
+
+.doctor-panel-card {
+  padding: 20px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.doctor-info-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.doctor-info-block {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(148, 163, 184, 0.05);
+}
+
+.doctor-info-heading,
+.doctor-diet-log-title,
+.doctor-diet-kicker {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+.doctor-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.doctor-info-span {
+  grid-column: 1 / -1;
+}
+
+.doctor-info-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 3px;
+}
+
+.doctor-info-value {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.doctor-info-list {
+  display: grid;
+  gap: 12px;
+}
+
+.doctor-info-copy {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.doctor-info-copy-prominent {
+  color: var(--text-primary);
+}
+
+.doctor-empty-state {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px dashed rgba(148, 163, 184, 0.24);
+  background: rgba(148, 163, 184, 0.04);
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.doctor-estimation-card {
+  padding: 20px;
+}
+
+.doctor-estimation-summary {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.doctor-estimation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.doctor-estimation-metric {
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(34, 211, 238, 0.06);
+  border: 1px solid rgba(34, 211, 238, 0.14);
+}
+
+.doctor-estimation-value {
+  font-size: 16px;
+  font-weight: 900;
+  margin-top: 4px;
+}
+
+.doctor-estimation-form-wrap {
+  margin-top: 12px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.doctor-diet-section-card {
+  padding: 22px;
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  background:
+    linear-gradient(180deg, rgba(6, 182, 212, 0.08), rgba(15, 23, 42, 0.76)),
+    rgba(15, 23, 42, 0.74);
+  box-shadow: 0 24px 70px rgba(8, 145, 178, 0.08);
+}
+
+.doctor-diet-section-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.doctor-diet-title {
+  margin-top: 4px;
+  font-size: 20px;
+}
+
+.doctor-diet-copy {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  max-width: 56ch;
+  line-height: 1.6;
+}
+
+.doctor-diet-metrics-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.doctor-diet-mini-metric {
+  min-width: 100px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  display: grid;
+  gap: 4px;
+}
+
+.doctor-diet-mini-metric span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+.doctor-diet-mini-metric strong {
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.doctor-diet-log-panel {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  display: grid;
+  gap: 10px;
+}
+
+.doctor-diet-log-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(148, 163, 184, 0.04);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.doctor-diet-refresh-btn {
+  width: fit-content;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.45);
+  color: var(--text-primary);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.doctor-diet-refresh-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+@media (max-width: 1100px) {
+  .doctor-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .doctor-detail-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .doctor-diet-section-top,
+  .doctor-detail-header-top {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 720px) {
+  .doctor-detail-page {
+    gap: 16px;
+  }
+
+  .doctor-detail-header-card,
+  .doctor-panel-card,
+  .doctor-diet-section-card {
+    padding: 16px;
+  }
+
+  .doctor-detail-summary-grid,
+  .doctor-estimation-grid,
+  .doctor-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .doctor-detail-header-badges,
+  .doctor-diet-metrics-strip {
+    justify-content: flex-start;
+  }
+
+  .doctor-diet-log-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 .doctor-activity-bars {
   display: flex;
   flex-direction: column;

@@ -12,10 +12,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { subscribeToAllPatientsLiveData } from "../services/realtimeDbService";
 import { db } from "../firebase";
+import { subscribeToAllPatientsLiveData } from "../services/realtimeDbService";
 import type { LiveDataMap, SensorSample } from "../types/sensor";
 import { computeAccuracy, detectAlertCount } from "../services/recoveryMetrics";
+import { useDietMetricsByPatients } from "../hooks/useDietMetricsByPatients";
 
 type PatientProfile = {
   uid: string;
@@ -31,6 +32,9 @@ type CaseloadRow = {
   age?: number;
   condition: string;
   adherence: number | null;
+  dietCompliance: number | null;
+  dietJunkCount: number;
+  dietConsistency: number;
   risk: "Low" | "Moderate" | "High" | "Unknown";
   nextSession: string;
   sessionStatus: "upcoming" | "completed" | "missed" | "unscheduled";
@@ -147,10 +151,17 @@ export default function DoctorDashboard() {
     return `${label} · ${time}`;
   };
 
+  const patientIds = useMemo(() => patients.map((patient) => patient.uid), [patients]);
+  const { metricsByPatient: dietMetricsByPatient } = useDietMetricsByPatients(patientIds, 7);
+
   const caseload = useMemo<CaseloadRow[]>(() => {
     return patients.map((patient) => {
       const sample = liveData[patient.uid];
       const adherence = sample ? computeAccuracy(sample) : null;
+      const dietMetrics = dietMetricsByPatient[patient.uid];
+      const dietCompliance = dietMetrics?.adherenceScore ?? 0;
+      const dietJunkCount = dietMetrics?.junkCount ?? 0;
+      const dietConsistency = dietMetrics?.weeklyConsistency ?? 0;
       const alertCount = sample ? detectAlertCount(sample) : 0;
       const scheduledAt = parseScheduledDate(patient.nextSession);
       const now = new Date();
@@ -184,12 +195,15 @@ export default function DoctorDashboard() {
         age: patient.age,
         condition: patient.condition || "Recovery plan pending",
         adherence,
+        dietCompliance,
+        dietJunkCount,
+        dietConsistency,
         risk,
         sessionStatus,
         nextSession: formatNextSession(scheduledAt, sessionStatus),
       };
     });
-  }, [patients, liveData]);
+  }, [patients, liveData, dietMetricsByPatient]);
 
   const kpi = useMemo(() => {
     const samples = caseload.filter((row) => row.adherence !== null);
@@ -565,6 +579,15 @@ export default function DoctorDashboard() {
                     <div className="doctor-patient-next">Last activity: {lastActivity}</div>
                     <div className="doctor-patient-next">
                       Next session: {patient.nextSession}
+                    </div>
+                    <div className="doctor-patient-next">
+                      Diet compliance: {patient.dietCompliance === null ? "--" : `${patient.dietCompliance}%`}
+                    </div>
+                    <div className="doctor-patient-next">
+                      Junk meals: {patient.dietJunkCount}
+                    </div>
+                    <div className="doctor-patient-next">
+                      Consistency: {patient.dietConsistency}%
                     </div>
                   </div>
 

@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Recommended: set custom claims { role: 'doctor' | 'patient' }
+    function isDoctor() {
+      return isSignedIn() && request.auth.token.role == 'doctor';
+    }
+
+    function isPatient(patientId) {
+      return isSignedIn() && request.auth.uid == patientId;
+    }
+
+    function doctorAssignedToPatient(patientId) {
+      return isDoctor()
+        && get(/databases/$(database)/documents/patients/$(patientId)).data.assignedDoctorId == request.auth.uid;
+    }
+
+    match /dietPlans/{patientId} {
+      allow read: if isPatient(patientId) || doctorAssignedToPatient(patientId);
+      allow create, update, delete: if doctorAssignedToPatient(patientId);
+    }
+
+    match /dietLogs/{patientId}/entries/{date} {
+      allow read: if isPatient(patientId) || doctorAssignedToPatient(patientId);
+      allow create, update: if isPatient(patientId);
+      allow delete: if false;
+    }
+
+    match /dietMetrics/{patientId} {
+      allow read: if isPatient(patientId) || doctorAssignedToPatient(patientId);
+      // Backend service account or privileged function should write metrics.
+      allow create, update: if false;
+      allow delete: if false;
+    }
+  }
+}

@@ -46,6 +46,26 @@ class GenerateResponse(BaseModel):
     answer: str
 
 
+class DietMealLog(BaseModel):
+    completed: bool = False
+    extras: str = ""
+
+
+class DietLogEntry(BaseModel):
+    date: str
+    meals: dict
+
+
+class DietMetricsRequest(BaseModel):
+    logs: list[DietLogEntry] = Field(default_factory=list)
+
+
+class DietMetricsResponse(BaseModel):
+    adherenceScore: int
+    junkCount: int
+    weeklyConsistency: int
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -77,6 +97,75 @@ def generate_text(payload: GenerateRequest) -> GenerateResponse:
             ) from exc
 
         raise HTTPException(status_code=500, detail=f"Gemini request failed: {error_text}") from exc
+
+
+def _is_junk_like(text: str) -> bool:
+    token = text.lower()
+    junk_keywords = [
+        "junk",
+        "burger",
+        "pizza",
+        "fries",
+        "fried",
+        "soda",
+        "chips",
+        "ice cream",
+        "pastry",
+        "sweet",
+    ]
+    return any(word in token for word in junk_keywords)
+
+
+@app.post("/api/diet/metrics", response_model=DietMetricsResponse)
+def compute_diet_metrics(payload: DietMetricsRequest) -> DietMetricsResponse:
+    logs = payload.logs[-7:]
+
+    if not logs:
+        return DietMetricsResponse(adherenceScore=0, junkCount=0, weeklyConsistency=0)
+
+    total_meals = 0
+    completed_meals = 0
+    junk_count = 0
+    completion_rates: list[float] = []
+
+    for entry in logs:
+        meals = entry.meals or {}
+        entry_total = 0
+        entry_completed = 0
+
+        for meal_name in ["breakfast", "lunch", "dinner", "snacks"]:
+            raw = meals.get(meal_name)
+            meal = DietMealLog(**raw) if isinstance(raw, dict) else DietMealLog()
+
+            entry_total += 1
+            total_meals += 1
+
+            if meal.completed:
+                entry_completed += 1
+                completed_meals += 1
+
+            if meal.extras.strip():
+                junk_count += 1
+                if _is_junk_like(meal.extras):
+                    junk_count += 1
+
+        if entry_total > 0:
+            completion_rates.append(entry_completed / entry_total)
+
+    adherence = round((completed_meals / total_meals) * 100) if total_meals > 0 else 0
+
+    if completion_rates:
+        avg = sum(completion_rates) / len(completion_rates)
+        variance = sum((rate - avg) ** 2 for rate in completion_rates) / len(completion_rates)
+        consistency = round(max(0, min(100, (1 - variance * 4) * 100)))
+    else:
+        consistency = 0
+
+    return DietMetricsResponse(
+        adherenceScore=max(0, min(100, adherence)),
+        junkCount=max(0, junk_count),
+        weeklyConsistency=max(0, min(100, consistency)),
+    )
 
 
 # Run with:
