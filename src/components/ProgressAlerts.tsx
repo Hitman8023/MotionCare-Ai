@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   subscribeToPatientLiveData,
   subscribeToPatientSessionHistory,
+  subscribeToServerTimeOffset,
   writePatientSessionSummary,
 } from "../services/realtimeDbService";
 import type { SessionSummary } from "../types/sensor";
@@ -31,6 +32,7 @@ const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const HISTORY_WEEKS = 12;
 const HISTORY_DAYS = HISTORY_WEEKS * 7;
+const DAILY_REP_STORAGE_KEY_PREFIX = "motioncare:daily-reps:v1";
 
 const defaultSessionDefaults = {
   lengthMinutes: 45,
@@ -55,19 +57,151 @@ function completionPercentFromRatio(ratio: number): number {
   return Math.round(Math.max(0, Math.min(1, ratio)) * 100);
 }
 
-function buildCheckpointGrid(
+function startOfDay(date: Date): Date {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function parseDateKeyToDay(dateKey?: string): Date | null {
+  if (!dateKey) return null;
+  const match = dateKey.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(year, month - 1, day);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return startOfDay(parsed);
+}
+
+function parseTimestampToDay(value?: string): Date | null {
+  if (!value) return null;
+
+  const parsed = new Date(value);
+  if (!Number.isNaN(parsed.getTime())) {
+    return startOfDay(parsed);
+  }
+
+  return parseDateKeyToDay(value);
+}
+
+function resolveLatestSessionDay(
   history: Record<string, SessionSummary>,
+): Date | null {
+  let latest: Date | null = null;
+
+  Object.values(history).forEach((summary) => {
+    const candidate =
+      parseTimestampToDay(summary.updatedAt) ??
+      parseTimestampToDay(summary.startedAt) ??
+      parseDateKeyToDay(summary.dateKey);
+    if (!candidate) return;
+    if (!latest || candidate.getTime() > latest.getTime()) {
+      latest = candidate;
+    }
+  });
+
+  return latest;
+}
+
+function resolveLatestLocalRepDay(patientUid: string): Date | null {
+  if (typeof window === "undefined") return null;
+  if (!patientUid) return null;
+
+  const prefix = `${DAILY_REP_STORAGE_KEY_PREFIX}:${patientUid}:`;
+  let latest: Date | null = null;
+
+  for (let i = 0; i < window.localStorage.length; i += 1) {
+    const key = window.localStorage.key(i);
+    if (!key || !key.startsWith(prefix)) continue;
+
+    const dateKey = key.slice(prefix.length);
+    const candidate = parseDateKeyToDay(dateKey);
+    if (!candidate) continue;
+
+    if (!latest || candidate.getTime() > latest.getTime()) {
+      latest = candidate;
+    }
+  }
+
+  return latest;
+}
+
+function resolveGridAnchorDate(
+  serverToday: Date,
+  latestSessionDay: Date | null,
+  latestSampleDay: Date | null,
+  latestLocalRepDay: Date | null,
+): Date {
+  const maxForwardDay = addDays(serverToday, 1);
+  const candidates = [latestSessionDay, latestSampleDay, latestLocalRepDay];
+
+  let anchor = serverToday;
+
+  candidates.forEach((candidate) => {
+    if (!candidate) return;
+
+    const time = candidate.getTime();
+    if (time > maxForwardDay.getTime()) return;
+
+    if (time > anchor.getTime()) {
+      anchor = candidate;
+    }
+  });
+
+  return anchor;
+}
+
+function readDailyRepCompletionPercent(
+  patientUid: string,
+  dateKey: string,
+  targetReps: number,
+): number {
+  if (typeof window === "undefined") return 0;
+  if (!patientUid || targetReps <= 0) return 0;
+
+  const storageKey = `${DAILY_REP_STORAGE_KEY_PREFIX}:${patientUid}:${dateKey}`;
+  const raw = window.localStorage.getItem(storageKey);
+  if (!raw) return 0;
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const repTotal = Object.values(parsed).reduce<number>((sum, value) => {
+      if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+        return sum;
+      }
+      return sum + Math.floor(value);
+    }, 0);
+
+    if (repTotal <= 0) return 0;
+    return completionPercentFromRatio(repTotal / targetReps);
+  } catch {
+    return 0;
+  }
+}
+
+function buildCheckpointGrid(
+  patientUid: string,
+  history: Record<string, SessionSummary>,
+  targetReps: number,
+  startDate: Date,
+  todayKey: string,
   todayPercent: number,
   days = HISTORY_DAYS,
 ): number[] {
-  const today = new Date();
-  const startDate = addDays(today, -(days - 1));
   return Array.from({ length: days }, (_, index) => {
     const dayKey = toDateKey(addDays(startDate, index));
     const summary = history[dayKey];
-    if (dayKey === toDateKey(today)) return todayPercent;
-    if (!summary) return 0;
-    return completionPercentFromRatio(summary.completionRatio || 0);
+    const historyPercent = summary
+      ? completionPercentFromRatio(summary.completionRatio || 0)
+      : 0;
+    const localPercent = readDailyRepCompletionPercent(patientUid, dayKey, targetReps);
+    const basePercent = Math.max(historyPercent, localPercent);
+    if (dayKey === todayKey) {
+      return Math.max(basePercent, todayPercent);
+    }
+    return basePercent;
   });
 }
 
@@ -124,29 +258,6 @@ function buildMonthGroups(weeks: WeekRow[]) {
   return groups;
 }
 
-function buildRecentFallbacks(today: Date): Record<string, SessionSummary> {
-  const start = addDays(today, -8);
-  const ratios = [0.4, 0.65, 0.2, 0.85, 1, 0.55, 0.3, 0.75];
-  const entries: Record<string, SessionSummary> = {};
-  ratios.forEach((ratio, index) => {
-    const day = addDays(start, index);
-    const startedAt = new Date(day);
-    startedAt.setHours(9 + (index % 3), 0, 0, 0);
-    const updatedAt = new Date(startedAt);
-    updatedAt.setMinutes(updatedAt.getMinutes() + 40);
-    entries[toDateKey(day)] = {
-      dateKey: toDateKey(day),
-      startedAt: startedAt.toISOString(),
-      updatedAt: updatedAt.toISOString(),
-      elapsedMinutes: Math.round(45 * ratio),
-      repsDone: Math.round(30 * ratio),
-      formQuality: Math.round(70 + ratio * 20),
-      completionRatio: ratio,
-    };
-  });
-  return entries;
-}
-
 function makePath(data: number[], w: number, h: number, pad = 4) {
   const min = Math.min(...data) - 2;
   const max = Math.max(...data) + 2;
@@ -170,7 +281,7 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
   const [accuracy, setAccuracy] = useState(0);
   const [flexRange, setFlexRange] = useState(0);
   const [alertsToday, setAlertsToday] = useState(0);
-  const [elapsedMinutes, setElapsedMinutes] = useState(0);
+  const [sessionStartMs, setSessionStartMs] = useState<number | null>(null);
   const [repsDone, setRepsDone] = useState(0);
   const [formQuality, setFormQuality] = useState(0);
   const [lastSampleAt, setLastSampleAt] = useState("");
@@ -184,13 +295,14 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
   const [sessionHistory, setSessionHistory] = useState<
     Record<string, SessionSummary>
   >({});
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  const [serverTimeOffsetMs, setServerTimeOffsetMs] = useState<number>(0);
   const sessionStartRef = useRef<number | null>(null);
   const lastRepAtRef = useRef(0);
   const alertCountRef = useRef(0);
   const lastAlertAtRef = useRef(0);
   const lastPersistedRef = useRef(0);
   const lastCompletionRef = useRef<number | null>(null);
-  const lastSeededRef = useRef<string | null>(null);
   const sessionDefaults = useMemo(() => {
     if (typeof window === "undefined") return defaultSessionDefaults;
     const raw = localStorage.getItem("motioncare:sessionDefaults");
@@ -229,12 +341,8 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
       const now = Date.now();
       if (!sessionStartRef.current) {
         sessionStartRef.current = now;
+        setSessionStartMs(now);
       }
-      setElapsedMinutes(
-        sessionStartRef.current
-          ? Math.floor((now - sessionStartRef.current) / 60000)
-          : 0,
-      );
       const nextScore = computeRecoveryScore(sample);
       const nextAccuracy = computeAccuracy(sample);
       const nextFlex = computeFlexRange(sample);
@@ -278,22 +386,31 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
   }, [patientUid]);
 
   useEffect(() => {
-    if (!patientUid) return;
-    const today = new Date();
-    const fallback = buildRecentFallbacks(today);
-    const missing = Object.entries(fallback).filter(
-      ([key]) => !sessionHistory[key],
+    const unsubscribe = subscribeToServerTimeOffset(
+      (offsetMs) => setServerTimeOffsetMs(offsetMs),
+      (error) => console.error("Server time offset error", error),
     );
-    if (missing.length === 0) return;
-    const seedKey = `${patientUid}-${Object.keys(fallback)[0] ?? "seed"}`;
-    if (lastSeededRef.current === seedKey) return;
-    lastSeededRef.current = seedKey;
-    missing.forEach(([key, summary]) => {
-      writePatientSessionSummary(patientUid, key, summary).catch((error) =>
-        console.error("Failed to seed recent history", error),
-      );
-    });
-  }, [patientUid, sessionHistory]);
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    const refreshNow = () => setNowMs(Date.now());
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshNow();
+      }
+    };
+
+    const interval = setInterval(refreshNow, 10000);
+    window.addEventListener("focus", refreshNow);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", refreshNow);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
 
   const progSpark = useMemo(
     () => makePath(scoreSeries, 500, 80),
@@ -305,31 +422,79 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
   const lengthMinutes = sessionDefaults.lengthMinutes;
   const targetReps = sessionDefaults.targetReps;
   const autosaveSeconds = sessionDefaults.autosaveSeconds;
+  const elapsedMs = useMemo(() => {
+    if (!sessionStartMs) return 0;
+    return Math.max(0, nowMs - sessionStartMs);
+  }, [nowMs, sessionStartMs]);
+  const elapsedMinutes = useMemo(() => {
+    if (elapsedMs <= 0) return 0;
+    return Math.floor(elapsedMs / 60000);
+  }, [elapsedMs]);
+  const timeCompletionRatio = useMemo(() => {
+    if (lengthMinutes <= 0) return 0;
+    return elapsedMs / (lengthMinutes * 60000);
+  }, [elapsedMs, lengthMinutes]);
   const progressRatio = Math.min(
     1,
     Math.max(
       targetReps > 0 ? repsDone / targetReps : 0,
-      lengthMinutes > 0 ? elapsedMinutes / lengthMinutes : 0,
+      timeCompletionRatio,
     ),
   );
   const todayCompletion = completionPercentFromRatio(progressRatio);
-  const displayHistory = useMemo(() => {
-    const today = new Date();
-    const fallback = buildRecentFallbacks(today);
-    const merged = { ...sessionHistory };
-    Object.entries(fallback).forEach(([key, summary]) => {
-      if (!merged[key]) merged[key] = summary;
-    });
-    return merged;
-  }, [sessionHistory]);
-  const checkpointGrid = useMemo(
-    () => buildCheckpointGrid(displayHistory, todayCompletion, HISTORY_DAYS),
-    [displayHistory, todayCompletion],
+
+  const serverToday = useMemo(
+    () => startOfDay(new Date(nowMs + serverTimeOffsetMs)),
+    [nowMs, serverTimeOffsetMs],
   );
-  const gridStartDate = useMemo(() => {
-    const today = new Date();
-    return addDays(today, -(HISTORY_DAYS - 1));
-  }, []);
+  const latestSessionDay = useMemo(
+    () => resolveLatestSessionDay(sessionHistory),
+    [sessionHistory],
+  );
+  const latestSampleDay = useMemo(
+    () => parseTimestampToDay(lastSampleAt),
+    [lastSampleAt],
+  );
+  const latestLocalRepDay = useMemo(
+    () => resolveLatestLocalRepDay(patientUid),
+    [patientUid, nowMs, repsDone],
+  );
+  const gridEndDate = useMemo(
+    () =>
+      resolveGridAnchorDate(
+        serverToday,
+        latestSessionDay,
+        latestSampleDay,
+        latestLocalRepDay,
+      ),
+    [serverToday, latestSessionDay, latestSampleDay, latestLocalRepDay],
+  );
+
+  const todayKey = useMemo(() => toDateKey(serverToday), [serverToday]);
+  const gridStartDate = useMemo(
+    () => addDays(gridEndDate, -(HISTORY_DAYS - 1)),
+    [gridEndDate],
+  );
+  const checkpointGrid = useMemo(
+    () =>
+      buildCheckpointGrid(
+        patientUid,
+        sessionHistory,
+        targetReps,
+        gridStartDate,
+        todayKey,
+        todayCompletion,
+        HISTORY_DAYS,
+      ),
+    [
+      patientUid,
+      sessionHistory,
+      targetReps,
+      gridStartDate,
+      todayKey,
+      todayCompletion,
+    ],
+  );
   const weeks = useMemo(
     () => buildWeeks(checkpointGrid, gridStartDate),
     [checkpointGrid, gridStartDate],
@@ -342,9 +507,9 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
 
   useEffect(() => {
     if (!patientUid) return;
-    if (!sessionStartRef.current && repsDone === 0 && elapsedMinutes === 0)
-      return;
+    if (!sessionStartMs && repsDone === 0 && elapsedMinutes === 0) return;
     const now = Date.now();
+    const effectiveNow = now + serverTimeOffsetMs;
     const shouldPersist =
       now - lastPersistedRef.current > autosaveSeconds * 1000 ||
       lastCompletionRef.current !== todayCompletion;
@@ -352,11 +517,11 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
     lastPersistedRef.current = now;
     lastCompletionRef.current = todayCompletion;
     const summary: SessionSummary = {
-      dateKey: toDateKey(new Date()),
-      startedAt: sessionStartRef.current
-        ? new Date(sessionStartRef.current).toISOString()
+      dateKey: todayKey,
+      startedAt: sessionStartMs
+        ? new Date(sessionStartMs + serverTimeOffsetMs).toISOString()
         : undefined,
-      updatedAt: new Date(now).toISOString(),
+      updatedAt: new Date(effectiveNow).toISOString(),
       elapsedMinutes,
       repsDone,
       formQuality,
@@ -372,6 +537,9 @@ export default function ProgressAlerts({ patientUid }: ProgressAlertsProps) {
     formQuality,
     progressRatio,
     todayCompletion,
+    todayKey,
+    sessionStartMs,
+    serverTimeOffsetMs,
     autosaveSeconds,
   ]);
 

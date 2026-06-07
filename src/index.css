@@ -53,6 +53,13 @@
   --nav-h: 70px;
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Chat stylesheet aliases (legacy naming used in src/styles/chat.css). */
+  --color-bg: var(--bg);
+  --color-card: var(--surface-solid);
+  --color-text: var(--text-primary);
+  --color-border: var(--border);
+  --color-primary: var(--teal);
 }
 
 /* ─── LIGHT THEME ─── */
@@ -1097,6 +1104,14 @@ body::before {
 .main.chat-main {
   padding: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.main.chat-main > * {
+  flex: 1;
+  min-height: 0;
 }
 
 .page-header {

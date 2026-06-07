@@ -14,7 +14,7 @@ import { signOutUser } from "./services/authService";
 import { setActiveUid } from "./services/realtimeDbService";
 import TopNav from "./components/TopNav";
 import Sidebar from "./components/Sidebar";
-import Dashboard from "./pages/Dashboard";
+import Dashboard from "./pages/Dashb oard";
 import LiveMonitoring from "./pages/LiveMonitoring";
 import MovementAnalysis from "./pages/MovementAnalysis";
 import AIInsights from "./pages/AIInsights";

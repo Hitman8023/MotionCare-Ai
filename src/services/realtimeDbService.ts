@@ -301,6 +301,22 @@ export function subscribeToAllPatientsLiveData(
   };
 }
 
+export function subscribeToServerTimeOffset(
+  onData: (offsetMs: number) => void,
+  onError?: (error: Error) => void,
+): () => void {
+  const offsetRef = ref(realtimeDb, ".info/serverTimeOffset");
+  return onValue(
+    offsetRef,
+    (snapshot) => {
+      onData(toNumber(snapshot.val(), 0));
+    },
+    (error) => {
+      if (onError) onError(error as Error);
+    },
+  );
+}
+
 export function subscribeToPatientSessionHistory(
   patientUid: string,
   onData: (data: Record<string, SessionSummary>) => void,
